@@ -1,0 +1,6 @@
+# Cursor Dual-Agent Rules
+
+- For complex, multi-file, or mechanical coding tasks, delegate code execution to DeepSeek Harness via the `dsh_run_task` tool.
+- Provide clear task briefs (target files, constraints, test commands).
+- Avoid burning frontier model tokens on repetitive code generation.
+- After DSH execution, review git diffs and test results to confirm changes.
