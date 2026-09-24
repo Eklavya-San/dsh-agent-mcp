@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { existsSync, readdirSync, statSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
 import { join, relative, resolve } from "path";
 
 export interface GitSnapshot {
@@ -168,3 +168,33 @@ export function diffWorkerChanges(
     rawDiff: combinedRawDiff.slice(0, 16000),
   };
 }
+
+export function ensureLocalGitExclude(repoRoot: string, entry = ".dsh-live.md"): boolean {
+  try {
+    const gitDir = join(repoRoot, ".git");
+    if (!existsSync(gitDir) || !statSync(gitDir).isDirectory()) return false;
+
+    const infoDir = join(gitDir, "info");
+    const excludeFile = join(infoDir, "exclude");
+    if (!existsSync(infoDir)) {
+      mkdirSync(infoDir, { recursive: true });
+    }
+
+    let existing = "";
+    if (existsSync(excludeFile)) {
+      existing = readFileSync(excludeFile, "utf-8");
+    }
+
+    const lines = existing.split("\n").map(l => l.trim());
+    if (lines.includes(entry)) {
+      return false; // Already present
+    }
+
+    const updated = existing ? `${existing.trimEnd()}\n${entry}\n` : `${entry}\n`;
+    writeFileSync(excludeFile, updated, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+

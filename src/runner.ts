@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import { writeFileSync } from "fs";
 import { join } from "path";
-import { snapshotGit, diffWorkerChanges } from "./git.js";
+import { snapshotGit, diffWorkerChanges, findGitRepositories, ensureLocalGitExclude } from "./git.js";
 import { resolveDshCommand } from "./dsh-bin.js";
 import type { DshTaskOptions, DshTaskResult } from "./types.js";
 
@@ -10,6 +10,12 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
   const startTime = Date.now();
   const taskId = `dsh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const liveFilePath = join(cwd, ".dsh-live.md");
+
+  // Ensure .dsh-live.md is excluded locally from git tracking in all workspace repos
+  const repos = findGitRepositories(cwd);
+  for (const repo of repos) {
+    ensureLocalGitExclude(repo, ".dsh-live.md");
+  }
 
   // 1. Snapshot git before starting
   const gitBefore = snapshotGit(cwd);
