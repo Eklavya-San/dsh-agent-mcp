@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { writeFileSync } from "fs";
 import { join } from "path";
 import { snapshotGit, diffWorkerChanges } from "./git.js";
+import { resolveDshCommand } from "./dsh-bin.js";
 import type { DshTaskOptions, DshTaskResult } from "./types.js";
 
 export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult> {
@@ -92,14 +93,20 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
       }
     };
 
-    // Use npx -y @deepseek-ai/dsh with headless profile
-    const child = spawn("npx", ["-y", "@deepseek-ai/dsh", "--profile", "headless", task], {
-      cwd,
-      env: {
+    const dshCmd = resolveDshCommand();
+    const spawnArgs = [...dshCmd.argsPrefix, "--profile", "headless", task];
 
-        ...process.env,
-        DSH_PERMISSION_MODE: "danger-full-access",
-      },
+    const childEnv = {
+      ...process.env,
+      DSH_PERMISSION_MODE: "danger-full-access",
+      ...(process.env.DSH_MODEL_ENDPOINT ? { OPENAI_BASE_URL: process.env.DSH_MODEL_ENDPOINT } : {}),
+      ...(process.env.DSH_MODEL ? { OPENAI_MODEL_NAME: process.env.DSH_MODEL } : {}),
+      ...(process.env.DSH_API_KEY ? { OPENAI_API_KEY: process.env.DSH_API_KEY } : {}),
+    };
+
+    const child = spawn(dshCmd.cmd, spawnArgs, {
+      cwd,
+      env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -144,7 +151,23 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
       const { filesChanged, diffSummary } = diffWorkerChanges(cwd, gitBefore);
 
       const reasoning = reasoningLines.join("\n").trim();
-      const summary = stdout.trim() || (code === 0 ? "Task completed successfully." : `Exited with code ${code}`);
+      let summary = stdout.trim() || (code === 0 ? "Task completed successfully." : `Exited with code ${code}`);
+      let errorMessage = code !== 0 ? stderr.trim() : undefined;
+
+      // Detect if npm failed to install DSH
+      if (
+        code !== 0 &&
+        (stderr.includes("403 Forbidden") ||
+          stderr.includes("not found and will be installed") ||
+          stderr.includes("E403") ||
+          stderr.includes("ENOENT"))
+      ) {
+        const helpful =
+          "\n\n[Diagnostic Note]: DeepSeek Harness binary could not be spawned or downloaded via npm. " +
+          "Ensure 'dsh' is installed in PATH, or set the 'DSH_BIN' environment variable to your local dsh executable.";
+        summary += helpful;
+        errorMessage = (errorMessage || "") + helpful;
+      }
 
       const status = timedOut
         ? "TIMED_OUT"
@@ -163,7 +186,7 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
         filesChanged,
         gitDiffSummary: diffSummary,
         exitCode: code,
-        error: code !== 0 ? stderr.trim() : undefined,
+        error: errorMessage,
         rawOutput: verbose ? stdout + "\n" + stderr : undefined,
       });
     });
@@ -171,18 +194,21 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
     child.on("error", (err) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
+      const helpful =
+        `Failed to spawn DeepSeek Harness process ('${dshCmd.display}'). ` +
+        "Please ensure 'dsh' is installed in PATH, or set DSH_BIN in your MCP environment configuration.";
       resolve({
         status: "FAILED",
         taskId,
         cwd,
         task,
         durationMs,
-        summary: "Failed to spawn DeepSeek Harness process",
+        summary: helpful,
         reasoning: "",
         filesChanged: [],
         gitDiffSummary: "None",
         exitCode: -1,
-        error: err.message,
+        error: `${err.message} (${helpful})`,
       });
     });
   });

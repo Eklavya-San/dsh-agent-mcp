@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import readline from "readline";
 import { marked } from "marked";
 import { markedTerminal } from "marked-terminal";
@@ -37,12 +37,32 @@ console.log(`${dim("│")} ${bold("Task:")} ${task}`);
 console.log(`${dim("│")} ${bold("Model:")} ${modelName} • Live Markdown Rendering`);
 console.log(bold(cyan("╰──────────────────────────────────────────────────────────────────────────\n")));
 
-const child = spawn("npx", ["-y", "@deepseek-ai/dsh", "--profile", "headless", task], {
-  env: {
+let dshCmd = "npx";
+let dshArgsPrefix = ["-y", "@deepseek-ai/dsh"];
 
-    ...process.env,
-    DSH_PERMISSION_MODE: "danger-full-access",
-  },
+if (process.env.DSH_BIN && process.env.DSH_BIN.trim().length > 0) {
+  dshCmd = process.env.DSH_BIN.trim();
+  dshArgsPrefix = [];
+} else {
+  try {
+    const which = execSync("which dsh", { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (which) {
+      dshCmd = which;
+      dshArgsPrefix = [];
+    }
+  } catch {}
+}
+
+const childEnv = {
+  ...process.env,
+  DSH_PERMISSION_MODE: "danger-full-access",
+  ...(process.env.DSH_MODEL_ENDPOINT ? { OPENAI_BASE_URL: process.env.DSH_MODEL_ENDPOINT } : {}),
+  ...(process.env.DSH_MODEL ? { OPENAI_MODEL_NAME: process.env.DSH_MODEL } : {}),
+  ...(process.env.DSH_API_KEY ? { OPENAI_API_KEY: process.env.DSH_API_KEY } : {}),
+};
+
+const child = spawn(dshCmd, [...dshArgsPrefix, "--profile", "headless", task], {
+  env: childEnv,
   stdio: ["inherit", "pipe", "pipe"],
 });
 

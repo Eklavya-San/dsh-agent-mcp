@@ -3,9 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node: >=20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io)
-[![Model Cost](https://img.shields.io/badge/Token%20Cost-%240-success.svg)](#supported-model-backends)
+[![Model Cost](https://img.shields.io/badge/Token%20Cost-%240-success.svg)](#-model-backend-configuration)
 
 > **Model Context Protocol (MCP) server connecting Google Antigravity, Claude Code, and Cursor to DeepSeek Harness (`@deepseek-ai/dsh`) for $0-cost autonomous coding and dual-agent verification.**
+
+📖 **Looking for internal design, sequence diagrams, and folder breakdown? Read the [Architecture & System Flow Guide](./ARCHITECTURE.md).**
 
 ---
 
@@ -43,22 +45,76 @@ sequenceDiagram
 
 ## ⚡ 60-Second Quickstart
 
-### 1. Prerequisites
+### Prerequisites
 - **Node.js** &ge; 20.0.0
-- A local or remote model endpoint (e.g., [Ollama](https://ollama.com) running `qwen2.5-coder:32b`, `qwen3.8:27b`, or `deepseek-coder-v2`).
+- An OpenAI-compatible local/free model endpoint (e.g. [Ollama](https://ollama.com) running `qwen2.5-coder:32b` or `qwen3.8:27b`).
 
-### 2. Configure Your AI IDE
+---
 
-#### Google Antigravity
-Add to your `mcp_config.json` (`~/.gemini/config/mcp_config.json`):
+### Step 1: Clone and Run the 1-Command Setup
+
+```bash
+git clone https://github.com/Eklavya-San/dsh-agent-mcp.git
+cd dsh-agent-mcp
+./scripts/setup.sh
+```
+
+The installer will:
+1. Install dependencies and compile TypeScript to `build/mcp.js`.
+2. Initialize starter `~/.dsh/settings.yaml` (if not already present).
+3. If Google Antigravity is detected, automatically install the subagents, rules, and skills into `~/.gemini/config/`.
+4. Output the exact configuration block for your environment.
+
+---
+
+### Step 2: Configure Your AI Client
+
+#### 1. Google Antigravity
+The installer `./scripts/setup.sh` automatically installs the worker subagents. Simply add the MCP server to `~/.gemini/config/mcp_config.json`:
+
 ```json
 {
   "mcpServers": {
     "dsh": {
-      "command": "npx",
-      "args": ["-y", "dsh-agent-mcp"],
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
       "env": {
-        "DSH_BACKEND_TYPE": "ollama",
+        "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
+        "DSH_MODEL": "qwen2.5-coder:32b"
+      }
+    }
+  }
+}
+```
+*(Replace `/ABSOLUTE/PATH/TO/dsh-agent-mcp` with your actual cloned path. For global npm install, use `"command": "npx"`, `"args": ["-y", "dsh-agent-mcp"]`)*
+
+#### 2. Claude Desktop / Claude Code
+- **Claude Desktop**: Add to `claude_desktop_config.json`:
+  ```json
+  {
+    "mcpServers": {
+      "dsh": {
+        "command": "node",
+        "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
+        "env": {
+          "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
+          "DSH_MODEL": "qwen2.5-coder:32b"
+        }
+      }
+    }
+  }
+  ```
+- **Claude Code**: Copy [`integrations/claude/CLAUDE.md`](./integrations/claude/CLAUDE.md) to your user directory (`~/.claude/CLAUDE.md`) or into your project root.
+
+#### 3. Cursor
+Add to `.cursor/mcp.json` in your workspace or global Cursor settings:
+```json
+{
+  "mcpServers": {
+    "dsh": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
+      "env": {
         "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
         "DSH_MODEL": "qwen2.5-coder:32b"
       }
@@ -67,16 +123,15 @@ Add to your `mcp_config.json` (`~/.gemini/config/mcp_config.json`):
 }
 ```
 
-#### Claude Desktop / Claude Code
-Add to `claude_desktop_config.json`:
+#### 4. Cline (VS Code Extension)
+Add to `cline_mcp_settings.json`:
 ```json
 {
   "mcpServers": {
     "dsh": {
-      "command": "npx",
-      "args": ["-y", "dsh-agent-mcp"],
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
       "env": {
-        "DSH_BACKEND_TYPE": "ollama",
         "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
         "DSH_MODEL": "qwen2.5-coder:32b"
       }
@@ -85,22 +140,71 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-#### Cursor
-Add to `.cursor/mcp.json` in your workspace:
-```json
-{
-  "mcpServers": {
-    "dsh": {
-      "command": "npx",
-      "args": ["-y", "dsh-agent-mcp"],
-      "env": {
-        "DSH_BACKEND_TYPE": "ollama",
-        "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
-        "DSH_MODEL": "qwen2.5-coder:32b"
-      }
-    }
-  }
-}
+---
+
+## ⚙️ Model Backend Configuration (`~/.dsh/settings.yaml`)
+
+DeepSeek Harness reads its model provider configuration from `~/.dsh/settings.yaml`. You can configure any OpenAI-compatible provider:
+
+### Option A: Local Ollama (Default)
+```yaml
+ui-theme:
+  preference: dark
+
+agent-default-model:
+  provider: ollama
+  model: qwen2.5-coder:32b
+
+providers:
+  ollama:
+    api: openai-completions
+    baseURL: http://localhost:11434/v1
+    models:
+      - id: qwen2.5-coder:32b
+      - id: qwen3.8:27b
+    apiKeyEnv: OLLAMA_API_KEY
+```
+
+### Option B: vLLM / SGLang Cluster
+```yaml
+agent-default-model:
+  provider: vllm
+  model: Qwen/Qwen2.5-Coder-32B-Instruct
+
+providers:
+  vllm:
+    api: openai-completions
+    baseURL: http://localhost:8000/v1
+    models:
+      - id: Qwen/Qwen2.5-Coder-32B-Instruct
+```
+
+### Option C: LM Studio
+```yaml
+agent-default-model:
+  provider: lmstudio
+  model: qwen2.5-coder-32b-instruct
+
+providers:
+  lmstudio:
+    api: openai-completions
+    baseURL: http://localhost:1234/v1
+    models:
+      - id: qwen2.5-coder-32b-instruct
+```
+
+---
+
+## 🔧 DeepSeek Harness Binary Resolution
+
+`dsh-agent-mcp` resolves the DeepSeek Harness executable in the following priority order:
+1. **Explicit `DSH_BIN` environment variable**: If you have a custom DSH binary or wrapper, set `DSH_BIN="/path/to/dsh"` in your shell or MCP `env`.
+2. **System `PATH`**: Checks if `dsh` is in your `$PATH` (`which dsh`).
+3. **Fallback**: Attempts `npx -y @deepseek-ai/dsh`.
+
+To verify your environment anytime:
+```bash
+npm run doctor
 ```
 
 ---
@@ -124,20 +228,8 @@ For interactive or visible streaming directly in your integrated terminal:
 
 ```bash
 # Stream live thinking tokens, tool calls, and syntax-highlighted markdown
-dsh-live --cwd "/path/to/project" "Refactor auth middleware to use JWT and verify with npm test"
+./bin/dsh-live --cwd "/path/to/project" "Refactor auth middleware to use JWT and verify with npm test"
 ```
-
----
-
-## 🤖 Supported Model Backends
-
-| Backend | Example Config | Default Endpoint |
-| :--- | :--- | :--- |
-| **Ollama** | `DSH_MODEL: "qwen2.5-coder:32b"` | `http://localhost:11434/v1` |
-| **vLLM / SGLang** | `DSH_MODEL: "Qwen/Qwen2.5-Coder-32B-Instruct"` | `http://localhost:8000/v1` |
-| **LM Studio** | `DSH_MODEL: "qwen2.5-coder-32b-instruct"` | `http://localhost:1234/v1` |
-| **FreeToken Cluster** | `DSH_MODEL: "Qwen3.6-35B-A3B-NVFP4"` | `http://<your-cluster>:10346/v1` |
-| **DeepSeek Official API** | `DSH_MODEL: "deepseek-coder"` | `https://api.deepseek.com/v1` |
 
 ---
 
@@ -167,7 +259,7 @@ Task for src/components/Form.tsx:
 ## 📦 Ready-to-Use Integrations
 
 This repository includes copy-paste templates in the [`integrations/`](./integrations) folder:
-- **`integrations/antigravity/`**: Subagent definitions (`dsh-worker.md`, `reviewer-worker.md`) and dual-agent rules.
+- **`integrations/antigravity/`**: Subagent definitions (`dsh-worker.md`, `reviewer-worker.md`), dual-agent rules, and [setup guide](./integrations/antigravity/README.md).
 - **`integrations/claude/`**: `CLAUDE.md` and desktop config.
 - **`integrations/cursor/`**: `.cursorrules` and `mcp.json`.
 - **`integrations/cline/`**: `cline_mcp_settings.json`.

@@ -12,6 +12,7 @@
     "build": "tsc",
     "start": "node build/mcp.js",
     "doctor": "node build/doctor.js",
+    "setup": "./scripts/setup.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare": "npm run build"

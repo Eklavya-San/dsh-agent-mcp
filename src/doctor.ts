@@ -4,6 +4,7 @@ import { join } from "path";
 import { homedir } from "os";
 import http from "http";
 import https from "https";
+import { checkDshInstalled } from "./dsh-bin.js";
 import type { DshDoctorReport } from "./types.js";
 import { getWebStatus } from "./web.js";
 
@@ -11,19 +12,10 @@ export async function runDshDoctor(): Promise<DshDoctorReport> {
   const dshDir = join(homedir(), ".dsh");
   const settingsPath = join(dshDir, "settings.yaml");
 
-  // 1. Check DSH binary / npx version
-  let dshInstalled = false;
-  let dshVersion = "unknown";
-  try {
-    const versionOutput = execSync("npx -y @deepseek-ai/dsh --version", {
-      encoding: "utf-8",
-      timeout: 15000,
-    }).trim();
-    dshInstalled = true;
-    dshVersion = versionOutput;
-  } catch {
-    dshInstalled = false;
-  }
+  // 1. Check DSH binary / executable / npx version
+  const dshCheck = checkDshInstalled();
+  const dshInstalled = dshCheck.installed;
+  const dshVersion = dshCheck.version;
 
 
   // 2. Read settings.yaml
@@ -101,6 +93,7 @@ export async function runDshDoctor(): Promise<DshDoctorReport> {
     dshBinary: {
       installed: dshInstalled,
       version: dshVersion,
+      path: dshCheck.path,
     },
     settings: {
       found: settingsFound,

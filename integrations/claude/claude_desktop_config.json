@@ -1,13 +1,11 @@
 {
   "mcpServers": {
     "dsh": {
-      "command": "npx",
-      "args": ["-y", "dsh-agent-mcp"],
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
       "env": {
-        "DSH_BACKEND_TYPE": "ollama",
         "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
-        "DSH_MODEL": "qwen2.5-coder:32b",
-        "DSH_API_KEY": ""
+        "DSH_MODEL": "qwen2.5-coder:32b"
       }
     }
   }
