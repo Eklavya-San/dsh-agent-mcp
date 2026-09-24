@@ -13,12 +13,12 @@
 
 ## 🎯 The Problem & The Solution
 
-Frontier LLMs (Gemini 1.5 Pro, Claude 3.5 Sonnet, GPT-4o) are phenomenal system architects, but using them to generate hundreds of lines of repetitive boilerplate, mechanical refactors, and test iteration code is:
+Frontier harnesses plans (claude, antigravity) are phenomenal system architects, but using them to generate hundreds of lines of repetitive boilerplate, mechanical refactors, and test iteration code is:
 1. **Expensive**: Burns significant paid API tokens.
 2. **Prone to Hallucinated Regressions**: Without an independent verification loop, self-auditing often misses edge cases.
 
 ### The Solution: Dual-Agent Architecture
-**DSH-Agent-MCP** turns your primary AI into a **Lead Architect** and delegates mechanical implementation to **DeepSeek Harness** running on your local or free model cluster (Ollama, vLLM, FreeToken, LM Studio), followed by an independent **Reviewer Agent** before any task is marked complete.
+**DSH-Agent-MCP** turns your primary AI into a **Lead Architect** and delegates mechanical implementation to **DeepSeek Harness** running on your local or free model cluster (Ollama, vLLM, FreeToken, LM Studio, nvidia nim, openrouter), followed by an independent **Reviewer Agent** before any task is marked complete.
 
 ```mermaid
 sequenceDiagram
@@ -47,7 +47,7 @@ sequenceDiagram
 
 ### Prerequisites
 - **Node.js** &ge; 20.0.0
-- An OpenAI-compatible local/free model endpoint (e.g. [Ollama](https://ollama.com) running `qwen2.5-coder:32b` or `qwen3.8:27b`).
+- An OpenAI-compatible local/free model endpoint (e.g. [Ollama](https://ollama.com) running `qwen3.6:35b` or `qwen3.8:27b`).
 
 ---
 
@@ -80,7 +80,7 @@ The installer `./scripts/setup.sh` automatically installs the worker subagents. 
       "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
       "env": {
         "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
-        "DSH_MODEL": "qwen2.5-coder:32b"
+        "DSH_MODEL": "qwen3.5:35b"
       }
     }
   }
@@ -98,7 +98,7 @@ The installer `./scripts/setup.sh` automatically installs the worker subagents. 
         "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
         "env": {
           "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
-          "DSH_MODEL": "qwen2.5-coder:32b"
+          "DSH_MODEL": "qwen3.5:35b"
         }
       }
     }
@@ -116,7 +116,7 @@ Add to `.cursor/mcp.json` in your workspace or global Cursor settings:
       "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
       "env": {
         "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
-        "DSH_MODEL": "qwen2.5-coder:32b"
+        "DSH_MODEL": "qwen3.5:35b"
       }
     }
   }
@@ -133,7 +133,7 @@ Add to `cline_mcp_settings.json`:
       "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
       "env": {
         "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
-        "DSH_MODEL": "qwen2.5-coder:32b"
+        "DSH_MODEL": "qwen3.5:35b"
       }
     }
   }
@@ -153,14 +153,14 @@ ui-theme:
 
 agent-default-model:
   provider: ollama
-  model: qwen2.5-coder:32b
+  model: qwen3.5:35b
 
 providers:
   ollama:
     api: openai-completions
     baseURL: http://localhost:11434/v1
     models:
-      - id: qwen2.5-coder:32b
+      - id: qwen3.5:35b
       - id: qwen3.8:27b
     apiKeyEnv: OLLAMA_API_KEY
 ```
@@ -268,4 +268,4 @@ This repository includes copy-paste templates in the [`integrations/`](./integra
 
 ## 📄 License
 
-MIT &copy; 2026 [Eklavya](https://github.com/Rauglothgor)
+MIT &copy; 2026 [Eklavya](https://github.com/Eklavya-San)

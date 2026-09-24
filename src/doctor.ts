@@ -61,7 +61,7 @@ export async function runDshDoctor(): Promise<DshDoctorReport> {
     const testUrl = `${endpointUrl.replace(/\/+$/, "")}/models`;
 
     const reachable = await new Promise<{ ok: boolean; status?: number; error?: string }>((resolve) => {
-      const req = client.get(testUrl, { timeout: 5000 }, (res) => {
+      const req = client.get(testUrl, { timeout: 1500 }, (res) => {
         resolve({ ok: (res.statusCode !== undefined && res.statusCode < 500), status: res.statusCode });
       });
       req.on("error", (e) => resolve({ ok: false, error: e.message }));

@@ -53,28 +53,66 @@ export function resolveDshCommand(): ResolvedDshCommand {
 
 /**
  * Checks if DSH is installed and executable, returning version or fallback status.
+ * Never executes npx over network to check installation.
  */
 export function checkDshInstalled(): { installed: boolean; version: string; path?: string } {
-  const resolved = resolveDshCommand();
+  // 1. Explicit environment variable
+  if (process.env.DSH_BIN && process.env.DSH_BIN.trim().length > 0) {
+    const customBin = process.env.DSH_BIN.trim();
+    try {
+      const versionOutput = execSync(`"${customBin}" --version`, {
+        encoding: "utf-8",
+        timeout: 2000,
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      return {
+        installed: true,
+        version: versionOutput || "detected",
+        path: customBin,
+      };
+    } catch {
+      return {
+        installed: false,
+        version: "unknown",
+        path: customBin,
+      };
+    }
+  }
+
+  // 2. Check if 'dsh' is available in PATH
   try {
-    const args = [...resolved.argsPrefix, "--version"];
-    const command = [resolved.cmd, ...args].join(" ");
-    const versionOutput = execSync(command, {
+    const whichOutput = execSync("which dsh", {
       encoding: "utf-8",
-      timeout: 10000,
+      timeout: 1000,
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
 
-    return {
-      installed: true,
-      version: versionOutput || "detected",
-      path: resolved.cmd,
-    };
-  } catch {
-    return {
-      installed: false,
-      version: "unknown",
-      path: resolved.cmd,
-    };
-  }
+    if (whichOutput) {
+      try {
+        const versionOutput = execSync(`"${whichOutput}" --version`, {
+          encoding: "utf-8",
+          timeout: 2000,
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+        return {
+          installed: true,
+          version: versionOutput || "detected",
+          path: whichOutput,
+        };
+      } catch {
+        return {
+          installed: true,
+          version: "detected",
+          path: whichOutput,
+        };
+      }
+    }
+  } catch {}
+
+  // 3. Not installed in system PATH
+  return {
+    installed: false,
+    version: "not installed",
+    path: undefined,
+  };
 }
