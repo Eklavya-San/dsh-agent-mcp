@@ -1,9 +1,60 @@
-import { spawn } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import { writeFileSync } from "fs";
 import { join } from "path";
 import { snapshotGit, diffWorkerChanges, findGitRepositories, ensureLocalGitExclude } from "./git.js";
 import { resolveDshCommand } from "./dsh-bin.js";
 import type { DshTaskOptions, DshTaskResult } from "./types.js";
+
+export interface ActiveTaskRecord {
+  child: ChildProcess;
+  cwd: string;
+  task: string;
+  startTime: number;
+}
+
+const activeTasks = new Map<string, ActiveTaskRecord>();
+
+export function registerActiveTask(taskId: string, record: ActiveTaskRecord): void {
+  activeTasks.set(taskId, record);
+}
+
+export function unregisterActiveTask(taskId: string): void {
+  activeTasks.delete(taskId);
+}
+
+export function listActiveTasks(): Array<{ taskId: string; cwd: string; task: string; runningSec: number }> {
+  const now = Date.now();
+  const list: Array<{ taskId: string; cwd: string; task: string; runningSec: number }> = [];
+  for (const [taskId, record] of activeTasks.entries()) {
+    list.push({
+      taskId,
+      cwd: record.cwd,
+      task: record.task,
+      runningSec: Math.floor((now - record.startTime) / 1000),
+    });
+  }
+  return list;
+}
+
+export function cancelDshTask(taskId: string): boolean {
+  const record = activeTasks.get(taskId);
+  if (!record) return false;
+
+  try {
+    record.child.kill("SIGTERM");
+    setTimeout(() => {
+      try {
+        if (!record.child.killed) record.child.kill("SIGKILL");
+      } catch {}
+    }, 1000);
+    activeTasks.delete(taskId);
+    return true;
+  } catch {
+    activeTasks.delete(taskId);
+    return false;
+  }
+}
+
 
 export function buildRunnerEnv(options: DshTaskOptions): NodeJS.ProcessEnv {
   const { model, endpoint, apiKey } = options;
@@ -125,6 +176,13 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
       stdio: ["ignore", "pipe", "pipe"],
     });
 
+    registerActiveTask(taskId, {
+      child,
+      cwd,
+      task,
+      startTime,
+    });
+
     const timer = setTimeout(() => {
       timedOut = true;
       try {
@@ -159,6 +217,7 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
 
     child.on("close", (code) => {
       clearTimeout(timer);
+      unregisterActiveTask(taskId);
       const durationMs = Date.now() - startTime;
 
       updateLiveFile(true, code);
@@ -208,6 +267,7 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
 
     child.on("error", (err) => {
       clearTimeout(timer);
+      unregisterActiveTask(taskId);
       const durationMs = Date.now() - startTime;
       const helpful =
         `Failed to spawn DeepSeek Harness process ('${dshCmd.display}'). ` +

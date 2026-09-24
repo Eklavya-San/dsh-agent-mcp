@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { runDshTask } from "./runner.js";
+import { runDshTask, cancelDshTask, listActiveTasks } from "./runner.js";
 import { runDshDoctor } from "./doctor.js";
 import { getWebStatus, startWebUi, stopWebUi } from "./web.js";
 import { listSessions } from "./sessions.js";
@@ -114,6 +114,28 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: "dsh_cancel_task",
+    description: "Terminate an active DeepSeek Harness task process by taskId.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        taskId: {
+          type: "string",
+          description: "ID of the task to terminate.",
+        },
+      },
+      required: ["taskId"],
+    },
+  },
+  {
+    name: "dsh_list_active_tasks",
+    description: "List currently running DeepSeek Harness tasks with their duration and workspace.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
 ];
 
 const server = new Server(
@@ -212,6 +234,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: "text",
               text: JSON.stringify({ count: sessions.length, sessions }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "dsh_cancel_task": {
+        const { taskId } = (args || {}) as any;
+        if (!taskId) {
+          throw new Error("Missing required argument 'taskId'.");
+        }
+        const cancelled = cancelDshTask(taskId);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  taskId,
+                  cancelled,
+                  message: cancelled
+                    ? `Task ${taskId} was terminated successfully.`
+                    : `Task ${taskId} not found or already completed.`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+
+      case "dsh_list_active_tasks": {
+        const tasks = listActiveTasks();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ count: tasks.length, tasks }, null, 2),
             },
           ],
         };
