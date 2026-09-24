@@ -89,6 +89,28 @@ if [ -d "${HOME}/.gemini" ]; then
   echo "✅ Installed dsh-worker and reviewer-worker subagents into ${ANTIGRAVITY_CONFIG}/"
   echo "✅ Installed AGENTS.md dual-agent rule into ${ANTIGRAVITY_CONFIG}/rules/"
   echo "✅ Installed dsh-orchestration skill into ${ANTIGRAVITY_CONFIG}/skills/"
+
+  # Update Antigravity mcp_config.json automatically if present
+  MCP_CONFIG="${HOME}/.gemini/config/mcp_config.json"
+  if [ -f "${MCP_CONFIG}" ]; then
+    echo "🔧 Updating Antigravity MCP config to point to this dsh-agent-mcp build..."
+    node -e "
+      const fs = require('fs');
+      const p = '${MCP_CONFIG}';
+      const cfg = JSON.parse(fs.readFileSync(p, 'utf-8'));
+      cfg.mcpServers = cfg.mcpServers || {};
+      cfg.mcpServers.dsh = {
+        command: 'node',
+        args: ['${MCP_SERVER_PATH}'],
+        env: {
+          DSH_MODEL_ENDPOINT: 'http://localhost:11434/v1',
+          DSH_MODEL: 'qwen2.5-coder:32b'
+        }
+      };
+      fs.writeFileSync(p, JSON.stringify(cfg, null, 2), 'utf-8');
+    "
+    echo "✅ Updated ${MCP_CONFIG} with active build path."
+  fi
 fi
 
 echo ""
