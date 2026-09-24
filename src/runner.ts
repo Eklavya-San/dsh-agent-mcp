@@ -5,11 +5,27 @@ import { snapshotGit, diffWorkerChanges, findGitRepositories, ensureLocalGitExcl
 import { resolveDshCommand } from "./dsh-bin.js";
 import type { DshTaskOptions, DshTaskResult } from "./types.js";
 
+export function buildRunnerEnv(options: DshTaskOptions): NodeJS.ProcessEnv {
+  const { model, endpoint, apiKey } = options;
+  const effectiveEndpoint = endpoint || process.env.DSH_MODEL_ENDPOINT || process.env.OPENAI_BASE_URL;
+  const effectiveModel = model || process.env.DSH_MODEL || process.env.OPENAI_MODEL_NAME;
+  const effectiveKey = apiKey || process.env.DSH_API_KEY || process.env.OPENAI_API_KEY;
+
+  return {
+    ...process.env,
+    DSH_PERMISSION_MODE: "danger-full-access",
+    ...(effectiveEndpoint ? { DSH_MODEL_ENDPOINT: effectiveEndpoint, OPENAI_BASE_URL: effectiveEndpoint } : {}),
+    ...(effectiveModel ? { DSH_MODEL: effectiveModel, OPENAI_MODEL_NAME: effectiveModel } : {}),
+    ...(effectiveKey ? { DSH_API_KEY: effectiveKey, OPENAI_API_KEY: effectiveKey } : {}),
+  };
+}
+
 export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult> {
   const { cwd, task, timeoutMs = 1800000, verbose = false } = options; // Default 30 min
   const startTime = Date.now();
   const taskId = `dsh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const liveFilePath = join(cwd, ".dsh-live.md");
+  const childEnv = buildRunnerEnv(options);
 
   // Ensure .dsh-live.md is excluded locally from git tracking in all workspace repos
   const repos = findGitRepositories(cwd);
@@ -41,7 +57,7 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
 
         let content = `# ⚡ DeepSeek Harness Live Activity\n\n`;
         content += `> **Status**: ${statusIcon} (${elapsedSec}s elapsed)\n`;
-        content += `> **Model**: ${process.env.DSH_MODEL || "Configured DSH Model"} • **$0 Cost Execution**\n`;
+        content += `> **Model**: ${childEnv.DSH_MODEL || "Configured DSH Model"} • **$0 Cost Execution**\n`;
         content += `> **Task**: ${task}\n`;
         content += `> **Workspace**: \`${cwd}\`\n\n`;
         content += `---\n\n`;
@@ -100,15 +116,8 @@ export async function runDshTask(options: DshTaskOptions): Promise<DshTaskResult
     };
 
     const dshCmd = resolveDshCommand();
-    const spawnArgs = [...dshCmd.argsPrefix, "--profile", "headless", task];
-
-    const childEnv = {
-      ...process.env,
-      DSH_PERMISSION_MODE: "danger-full-access",
-      ...(process.env.DSH_MODEL_ENDPOINT ? { OPENAI_BASE_URL: process.env.DSH_MODEL_ENDPOINT } : {}),
-      ...(process.env.DSH_MODEL ? { OPENAI_MODEL_NAME: process.env.DSH_MODEL } : {}),
-      ...(process.env.DSH_API_KEY ? { OPENAI_API_KEY: process.env.DSH_API_KEY } : {}),
-    };
+    const profile = options.profile || "headless";
+    const spawnArgs = [...dshCmd.argsPrefix, "--profile", profile, task];
 
     const child = spawn(dshCmd.cmd, spawnArgs, {
       cwd,

@@ -1,6 +1,10 @@
 export interface DshTaskOptions {
   cwd: string;
   task: string;
+  model?: string;
+  endpoint?: string;
+  apiKey?: string;
+  profile?: string;
   timeoutMs?: number;
   verbose?: boolean;
 }

@@ -22,19 +22,27 @@ const TOOLS = [
       properties: {
         cwd: {
           type: "string",
-          description: "Absolute path to the repository/directory the worker should operate in.",
+          description: "Absolute path to repository/workspace.",
         },
         task: {
           type: "string",
-          description: "Clear, explicit instructions for the task: files to edit/create, requirements, constraints, and test commands.",
+          description: "Clear explicit instructions for the task.",
+        },
+        model: {
+          type: "string",
+          description: "Optional model override (e.g. qwen2.5-coder:32b, Qwen3.6-35B-A3B-NVFP4).",
+        },
+        endpoint: {
+          type: "string",
+          description: "Optional OpenAI-compatible endpoint URL (e.g. http://localhost:11434/v1).",
         },
         timeoutMs: {
           type: "number",
-          description: "Max execution time in milliseconds (default: 1800000 = 30 minutes).",
+          description: "Max execution time in milliseconds (default: 30 minutes).",
         },
         verbose: {
           type: "boolean",
-          description: "Whether to include full raw stdout/stderr in the response (default: false).",
+          description: "Include raw stdout/stderr in output.",
         },
       },
       required: ["cwd", "task"],
@@ -130,11 +138,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "dsh_run_task": {
-        const { cwd, task, timeoutMs, verbose } = (args || {}) as any;
+        const { cwd, task, model, endpoint, apiKey, profile, timeoutMs, verbose } = (args || {}) as any;
         if (!cwd || !task) {
           throw new Error("Missing required arguments 'cwd' and 'task'.");
         }
-        const result = await runDshTask({ cwd, task, timeoutMs, verbose });
+        const result = await runDshTask({ cwd, task, model, endpoint, apiKey, profile, timeoutMs, verbose });
         return {
           content: [
             {
