@@ -68,3 +68,33 @@ export interface DshWebStatus {
   pid?: number;
   recentSessionsCount: number;
 }
+
+export interface DshReviewOptions {
+  cwd: string;
+  brief: string;
+  diff?: string;
+  testCommand?: string;
+  model?: string;
+  endpoint?: string;
+}
+
+export interface DshReviewResult {
+  verdict: "APPROVED" | "NEEDS_REVISION";
+  summary: string;
+  diffInspected: string;
+  specCompliance: {
+    compliant: boolean;
+    missingRequirements: string[];
+    unrequestedChanges: string[];
+  };
+  qualityAudit: {
+    issues: Array<{ severity: "CRITICAL" | "IMPORTANT" | "MINOR"; description: string; file?: string }>;
+    strengths: string[];
+  };
+  testResults?: {
+    command: string;
+    passed: boolean;
+    output: string;
+  };
+}
+

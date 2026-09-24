@@ -9,6 +9,7 @@ import { runDshTask, cancelDshTask, listActiveTasks } from "./runner.js";
 import { runDshDoctor } from "./doctor.js";
 import { getWebStatus, startWebUi, stopWebUi } from "./web.js";
 import { listSessions } from "./sessions.js";
+import { runDshReview } from "./review.js";
 
 const TOOLS = [
   {
@@ -136,7 +137,44 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name: "dsh_review_task",
+    description:
+      "Automated code review and QA verification tool for dual-agent workflows. Inspects git diffs, executes test suites, " +
+      "and queries the configured local/free model for a structured evaluation of architectural intent compliance and code quality.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cwd: {
+          type: "string",
+          description: "Absolute path to repository/workspace.",
+        },
+        brief: {
+          type: "string",
+          description: "Architectural intent or task description to audit the changes against.",
+        },
+        diff: {
+          type: "string",
+          description: "Optional explicit git diff string. If omitted, diff is automatically computed from git status/HEAD.",
+        },
+        testCommand: {
+          type: "string",
+          description: "Optional test or build command to execute for automated QA verification (e.g. 'npm test').",
+        },
+        model: {
+          type: "string",
+          description: "Optional model override for the review evaluator.",
+        },
+        endpoint: {
+          type: "string",
+          description: "Optional OpenAI-compatible model endpoint URL.",
+        },
+      },
+      required: ["cwd", "brief"],
+    },
+  },
 ];
+
 
 const server = new Server(
   {
@@ -272,6 +310,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: "text",
               text: JSON.stringify({ count: tasks.length, tasks }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "dsh_review_task": {
+        const { cwd, brief, diff, testCommand, model, endpoint } = (args || {}) as any;
+        if (!cwd || !brief) {
+          throw new Error("Missing required arguments 'cwd' and 'brief'.");
+        }
+        const result = await runDshReview({ cwd, brief, diff, testCommand, model, endpoint });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
             },
           ],
         };
