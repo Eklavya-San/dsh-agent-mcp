@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# pi-live: Runs Pi directly inside the integrated terminal with real-time streaming output.
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STREAMER="${SCRIPT_DIR}/pi-stream.js"
+
+CWD="$(pwd)"
+MODEL=""
+PROVIDER="freetoken"
+TASK=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      echo "Usage: pi-live [--cwd <path>] [--model <model>] [--provider <provider>] \"<task prompt>\""
+      exit 1
+      ;;
+    --cwd)
+      CWD="$2"
+      shift 2
+      ;;
+    --model)
+      MODEL="$2"
+      shift 2
+      ;;
+    --provider)
+      PROVIDER="$2"
+      shift 2
+      ;;
+    *)
+      if [ -z "$TASK" ]; then
+        TASK="$1"
+      else
+        TASK="$TASK $1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$TASK" ]; then
+  echo "Usage: pi-live [--cwd <path>] [--model <model>] [--provider <provider>] \"<task prompt>\""
+  exit 1
+fi
+
+EXTRA_ARGS=()
+if [ -n "$MODEL" ]; then
+  EXTRA_ARGS+=("--model" "$MODEL")
+elif [ "$PROVIDER" = "freetoken" ]; then
+  EXTRA_ARGS+=("--model" "freetoken/Qwen3.6-35B-A3B-NVFP4")
+elif [ "$PROVIDER" = "nvidia-nim" ]; then
+  EXTRA_ARGS+=("--model" "nvidia-nim/nvidia/nemotron-3.5-lightning-30b-a3b")
+elif [ "$PROVIDER" = "ollama" ]; then
+  EXTRA_ARGS+=("--model" "ollama/qwen2.5-coder:32b")
+elif [ "$PROVIDER" = "openrouter" ]; then
+  EXTRA_ARGS+=("--model" "openrouter/qwen/qwen3-coder")
+fi
+
+cd "${CWD}"
+exec node "${STREAMER}" "${EXTRA_ARGS[@]}" --no-session "${TASK}"
