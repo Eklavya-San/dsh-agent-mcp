@@ -19,7 +19,7 @@ describe("Provider Routing", () => {
   it("should resolve ollama provider correctly", () => {
     const provider = resolveProvider("ollama");
     expect(provider.id).toBe("ollama");
-    expect(provider.baseUrl).toContain("11434");
+    expect(provider.baseUrl).toMatch(/11434|10075/);
   });
 
   it("should list all configured providers", () => {

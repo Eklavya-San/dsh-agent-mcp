@@ -1,6 +1,7 @@
 import type { ProviderConfig } from "./types.js";
+import { loadPiConfig } from "./pi-config.js";
 
-export function getProviders(): ProviderConfig[] {
+export function getStaticProviders(): ProviderConfig[] {
   return [
     {
       id: "freetoken",
@@ -33,11 +34,66 @@ export function getProviders(): ProviderConfig[] {
   ];
 }
 
+export function getProviders(): ProviderConfig[] {
+  const staticPresets = getStaticProviders();
+  try {
+    const config = loadPiConfig();
+    if (!config.providers || config.providers.length === 0) {
+      return staticPresets;
+    }
+
+    const dynamicMap = new Map<string, ProviderConfig>();
+    for (const p of config.providers) {
+      dynamicMap.set(p.id.toLowerCase(), {
+        id: p.id,
+        name: p.name || p.id,
+        baseUrl: p.baseUrl,
+        defaultModel: p.defaultModel || (p.models && p.models[0]?.id) || "",
+        apiKey: p.apiKey,
+      });
+    }
+
+    const result: ProviderConfig[] = [];
+    const seen = new Set<string>();
+
+    for (const [idLower, dyn] of dynamicMap) {
+      const stat = staticPresets.find((s) => s.id.toLowerCase() === idLower);
+      result.push({
+        id: dyn.id,
+        name: dyn.name || stat?.name || dyn.id,
+        baseUrl: dyn.baseUrl || stat?.baseUrl || "",
+        defaultModel: dyn.defaultModel || stat?.defaultModel || "",
+        apiKey: dyn.apiKey || stat?.apiKey,
+      });
+      seen.add(idLower);
+    }
+
+    for (const stat of staticPresets) {
+      if (!seen.has(stat.id.toLowerCase())) {
+        result.push(stat);
+      }
+    }
+
+    return result;
+  } catch {
+    return staticPresets;
+  }
+}
+
 export function resolveProvider(name?: string): ProviderConfig {
   const providers = getProviders();
   if (!name) {
-    const defaultId = process.env.PI_DEFAULT_PROVIDER || "freetoken";
-    return providers.find((p) => p.id === defaultId) || providers[0];
+    let defaultId = process.env.PI_DEFAULT_PROVIDER;
+    if (!defaultId) {
+      try {
+        const config = loadPiConfig();
+        defaultId = config.defaultProvider;
+      } catch {
+        // ignore
+      }
+    }
+    defaultId = defaultId || "freetoken";
+    return providers.find((p) => p.id.toLowerCase() === defaultId!.toLowerCase()) || providers[0];
   }
   const match = providers.find((p) => p.id.toLowerCase() === name.toLowerCase());
   if (!match) {
