@@ -1,4 +1,5 @@
 import { spawn, execSync } from "child_process";
+import { EventEmitter } from "events";
 import http from "http";
 import https from "https";
 import { fileURLToPath } from "url";
@@ -6,6 +7,24 @@ import type { DshWebStatus } from "./types.js";
 import { listActiveTasks, cancelPiTask } from "./runner.js";
 import { checkPiInstalled } from "./pi-bin.js";
 import { loadPiConfig, setPiDefaultModel, savePiProvider } from "./pi-config.js";
+
+export const taskEvents = new EventEmitter();
+taskEvents.setMaxListeners(100);
+
+export interface TaskEvent {
+  type: string;
+  taskId?: string;
+  data?: any;
+  message?: string;
+  [key: string]: any;
+}
+
+export function emitTaskEvent(event: TaskEvent): void {
+  taskEvents.emit("task-event", event);
+  if (event.type) {
+    taskEvents.emit(event.type, event);
+  }
+}
 
 export const DEFAULT_PORT = parseInt(process.env.PI_WEB_PORT || "7081", 10) || 7081;
 
@@ -123,6 +142,45 @@ export function createWebServer(): http.Server {
           piBinary: checkPiInstalled(),
           uptimeSec: Math.floor(process.uptime()),
         });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/events") {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        });
+
+        // Send initial state event immediately upon connection
+        res.write(`data: ${JSON.stringify({ type: "init", activeTasks: listActiveTasks() })}\n\n`);
+
+        const onTaskEvent = (evt: TaskEvent) => {
+          if (!res.writableEnded && !res.destroyed) {
+            res.write(`data: ${JSON.stringify(evt)}\n\n`);
+          }
+        };
+
+        taskEvents.on("task-event", onTaskEvent);
+
+        const keepAliveTimer = setInterval(() => {
+          if (!res.writableEnded && !res.destroyed) {
+            res.write(": ping\n\n");
+          }
+        }, 15000);
+        keepAliveTimer.unref();
+
+        let cleanedUp = false;
+        const cleanup = () => {
+          if (cleanedUp) return;
+          cleanedUp = true;
+          taskEvents.off("task-event", onTaskEvent);
+          clearInterval(keepAliveTimer);
+        };
+
+        req.on("close", cleanup);
+        res.on("close", cleanup);
         return;
       }
 

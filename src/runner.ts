@@ -5,6 +5,7 @@ import { snapshotGit, diffWorkerChanges, findGitRepositories, ensureLocalGitExcl
 import { resolvePiBinary } from "./pi-bin.js";
 import { resolveProvider } from "./providers.js";
 import type { DshTaskOptions, DshTaskResult, PiTaskOptions, PiTaskResult } from "./types.js";
+import { emitTaskEvent } from "./web.js";
 
 export interface ActiveTaskRecord {
   child: ChildProcess;
@@ -49,6 +50,10 @@ export function cancelPiTask(taskId: string): boolean {
       } catch {}
     }, 1000);
     activeTasks.delete(taskId);
+    emitTaskEvent({
+      type: "task_cancelled",
+      taskId,
+    });
     return true;
   } catch {
     activeTasks.delete(taskId);
@@ -190,6 +195,15 @@ export async function runPiTask(options: PiTaskOptions): Promise<PiTaskResult> {
       startTime,
     });
 
+    emitTaskEvent({
+      type: "task_started",
+      taskId,
+      cwd,
+      task,
+      model: effectiveModel,
+      startTime,
+    });
+
     const timer = setTimeout(() => {
       timedOut = true;
       try {
@@ -201,16 +215,32 @@ export async function runPiTask(options: PiTaskOptions): Promise<PiTaskResult> {
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf-8");
+      const delta = chunk.toString("utf-8");
+      stdout += delta;
       scheduleLiveUpdate();
+      emitTaskEvent({
+        type: "log_delta",
+        taskId,
+        delta,
+      });
     });
 
     child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf-8");
+      const delta = chunk.toString("utf-8");
+      stderr += delta;
       scheduleLiveUpdate();
+      emitTaskEvent({
+        type: "log_delta",
+        taskId,
+        delta,
+      });
     });
 
+    let settled = false;
+
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       unregisterActiveTask(taskId);
       const durationMs = Date.now() - startTime;
@@ -227,6 +257,14 @@ export async function runPiTask(options: PiTaskOptions): Promise<PiTaskResult> {
 
       const error = code !== 0 ? (stderr.trim() || `Process exited with code ${code}`) : undefined;
 
+      emitTaskEvent({
+        type: "task_finished",
+        taskId,
+        status,
+        durationMs,
+        filesChanged,
+      });
+
       resolve({
         status,
         taskId,
@@ -242,6 +280,8 @@ export async function runPiTask(options: PiTaskOptions): Promise<PiTaskResult> {
     });
 
     child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       unregisterActiveTask(taskId);
       const durationMs = Date.now() - startTime;
@@ -249,6 +289,14 @@ export async function runPiTask(options: PiTaskOptions): Promise<PiTaskResult> {
       updateLiveFile(true, -1);
 
       const { filesChanged, diffSummary, rawDiff } = diffWorkerChanges(cwd, beforeSnapshot);
+
+      emitTaskEvent({
+        type: "task_finished",
+        taskId,
+        status: "FAILED",
+        durationMs,
+        filesChanged,
+      });
 
       resolve({
         status: "FAILED",
