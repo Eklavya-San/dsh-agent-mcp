@@ -7,6 +7,8 @@ import type { DshWebStatus } from "./types.js";
 import { listActiveTasks, cancelPiTask } from "./runner.js";
 import { checkPiInstalled } from "./pi-bin.js";
 import { loadPiConfig, setPiDefaultModel, savePiProvider } from "./pi-config.js";
+import { getDashboardHtml } from "./web-html.js";
+import { runPiDoctor } from "./doctor.js";
 
 export const taskEvents = new EventEmitter();
 taskEvents.setMaxListeners(100);
@@ -128,9 +130,17 @@ export function createWebServer(): http.Server {
           "Content-Type": "text/html; charset=utf-8",
           ...CORS_HEADERS,
         });
-        res.end(
-          `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pi Agent Dashboard</title></head><body><h1>Pi Agent Web UI</h1><p>Running on port ${getPort()}</p></body></html>`
-        );
+        res.end(getDashboardHtml());
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/doctor") {
+        try {
+          const report = await runPiDoctor();
+          sendJson(res, 200, report);
+        } catch (err: any) {
+          sendJson(res, 500, { error: err?.message || "Doctor check failed" });
+        }
         return;
       }
 
