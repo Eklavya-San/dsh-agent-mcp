@@ -169,7 +169,7 @@ export function diffWorkerChanges(
   };
 }
 
-export function ensureLocalGitExclude(repoRoot: string, entry = ".dsh-live.md"): boolean {
+export function ensureLocalGitExclude(repoRoot: string, entry = ".pi-live.md"): boolean {
   try {
     const gitDir = join(repoRoot, ".git");
     if (!existsSync(gitDir) || !statSync(gitDir).isDirectory()) return false;

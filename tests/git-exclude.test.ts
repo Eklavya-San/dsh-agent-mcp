@@ -15,15 +15,26 @@ describe("Git Info Exclude Cleaner", () => {
     rmSync(testRepo, { recursive: true, force: true });
   });
 
-  it("should append .dsh-live.md to .git/info/exclude without duplicating", () => {
-    const added1 = ensureLocalGitExclude(testRepo, ".dsh-live.md");
+  it("should append .pi-live.md by default to .git/info/exclude without duplicating", () => {
+    const added1 = ensureLocalGitExclude(testRepo);
     expect(added1).toBe(true);
 
     const content1 = readFileSync(join(testRepo, ".git", "info", "exclude"), "utf-8");
-    expect(content1).toContain(".dsh-live.md");
+    expect(content1).toContain(".pi-live.md");
 
     // Second call should be a no-op
-    const added2 = ensureLocalGitExclude(testRepo, ".dsh-live.md");
+    const added2 = ensureLocalGitExclude(testRepo);
+    expect(added2).toBe(false);
+  });
+
+  it("should allow appending custom entries without duplicating", () => {
+    const added1 = ensureLocalGitExclude(testRepo, ".custom-file.md");
+    expect(added1).toBe(true);
+
+    const content1 = readFileSync(join(testRepo, ".git", "info", "exclude"), "utf-8");
+    expect(content1).toContain(".custom-file.md");
+
+    const added2 = ensureLocalGitExclude(testRepo, ".custom-file.md");
     expect(added2).toBe(false);
   });
 });

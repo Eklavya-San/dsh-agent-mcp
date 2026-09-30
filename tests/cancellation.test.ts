@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { cancelDshTask, listActiveTasks, registerActiveTask, unregisterActiveTask } from "../src/runner.js";
+import { cancelPiTask, cancelDshTask, listActiveTasks, registerActiveTask, unregisterActiveTask } from "../src/runner.js";
 
-describe("Task Cancellation & Active Registry", () => {
-  it("should register, list, and unregister active tasks", () => {
+describe("Pi Task Cancellation & Active Registry", () => {
+  it("should register, list, and cancel active tasks with cancelPiTask", () => {
     const mockChild: any = { kill: () => true };
     registerActiveTask("task-123", {
       child: mockChild,
@@ -14,7 +14,7 @@ describe("Task Cancellation & Active Registry", () => {
     const active = listActiveTasks();
     expect(active.some((t) => t.taskId === "task-123")).toBe(true);
 
-    const cancelled = cancelDshTask("task-123");
+    const cancelled = cancelPiTask("task-123");
     expect(cancelled).toBe(true);
 
     const after = listActiveTasks();
@@ -32,7 +32,23 @@ describe("Task Cancellation & Active Registry", () => {
     expect(listActiveTasks().some((t) => t.taskId === "task-456")).toBe(false);
   });
 
+  it("should maintain backward-compatible cancelDshTask alias", () => {
+    const mockChild: any = { kill: () => true };
+    registerActiveTask("dsh-task-compat", {
+      child: mockChild,
+      cwd: "/test/dir",
+      task: "legacy compatibility prompt",
+      startTime: Date.now(),
+    });
+
+    expect(listActiveTasks().some((t) => t.taskId === "dsh-task-compat")).toBe(true);
+    const cancelled = cancelDshTask("dsh-task-compat");
+    expect(cancelled).toBe(true);
+    expect(listActiveTasks().some((t) => t.taskId === "dsh-task-compat")).toBe(false);
+  });
+
   it("should return false when cancelling non-existent task", () => {
+    expect(cancelPiTask("non-existent-task")).toBe(false);
     expect(cancelDshTask("non-existent-task")).toBe(false);
   });
 });
