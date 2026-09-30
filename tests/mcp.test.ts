@@ -14,12 +14,18 @@ describe("MCP Server Tools Registration & Routing", () => {
     expect(toolNames).toContain("pi_cancel_task");
     expect(toolNames).toContain("pi_list_active_tasks");
     expect(toolNames).toContain("pi_review_task");
+    expect(toolNames).toContain("pi_web_start");
+    expect(toolNames).toContain("pi_web_status");
+    expect(toolNames).toContain("pi_web_stop");
 
     expect(toolNames).toContain("dsh_run_task");
     expect(toolNames).toContain("dsh_doctor");
     expect(toolNames).toContain("dsh_cancel_task");
     expect(toolNames).toContain("dsh_list_active_tasks");
     expect(toolNames).toContain("dsh_review_task");
+    expect(toolNames).toContain("dsh_web_start");
+    expect(toolNames).toContain("dsh_web_status");
+    expect(toolNames).toContain("dsh_web_stop");
   });
 
   it("should have correct input schemas for pi_run_task and pi_review_task", () => {
@@ -91,6 +97,24 @@ describe("MCP Server Tools Registration & Routing", () => {
     });
     const parsedLegacyCancel = JSON.parse((legacyCancelResult.content[0] as any).text);
     expect(parsedLegacyCancel.cancelled).toBe(false);
+
+    // Test calling pi_web_status on unused port
+    const webStatusResult = await client.callTool({
+      name: "pi_web_status",
+      arguments: { port: 59199 },
+    });
+    const parsedWebStatus = JSON.parse((webStatusResult.content[0] as any).text);
+    expect(parsedWebStatus.running).toBe(false);
+    expect(parsedWebStatus.port).toBe(59199);
+
+    // Test calling legacy dsh_web_status on unused port
+    const legacyWebStatusResult = await client.callTool({
+      name: "dsh_web_status",
+      arguments: { port: 59199 },
+    });
+    const parsedLegacyWebStatus = JSON.parse((legacyWebStatusResult.content[0] as any).text);
+    expect(parsedLegacyWebStatus.running).toBe(false);
+    expect(parsedLegacyWebStatus.port).toBe(59199);
 
     // Test validation error handling
     const errorResult = await client.callTool({
@@ -174,6 +198,9 @@ describe("MCP Server Tools Registration & Routing", () => {
     expect(names).toContain("pi_cancel_task");
     expect(names).toContain("pi_list_active_tasks");
     expect(names).toContain("pi_review_task");
+    expect(names).toContain("pi_web_start");
+    expect(names).toContain("pi_web_status");
+    expect(names).toContain("pi_web_stop");
 
     child.kill("SIGTERM");
   });

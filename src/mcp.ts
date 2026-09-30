@@ -10,6 +10,7 @@ import { runPiTask, cancelPiTask, listActiveTasks } from "./runner.js";
 import { runPiDoctor } from "./doctor.js";
 import { listProviders } from "./providers.js";
 import { runPiReview } from "./review.js";
+import { getWebStatus, startWebUi, stopWebUi } from "./web.js";
 
 export const TOOLS = [
   {
@@ -122,6 +123,48 @@ export const TOOLS = [
       required: ["cwd", "brief"],
     },
   },
+  {
+    name: "pi_web_start",
+    description:
+      "Start the Pi Agent visual Web UI dashboard companion in the background as a detached daemon (default port: 7081).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        port: {
+          type: "number",
+          description: "Optional port number to bind the Web UI dashboard (default: 7081).",
+        },
+      },
+    },
+  },
+  {
+    name: "pi_web_status",
+    description:
+      "Inspect the running status and health of the Pi Agent visual Web UI dashboard companion.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        port: {
+          type: "number",
+          description: "Optional port number to inspect (default: 7081).",
+        },
+      },
+    },
+  },
+  {
+    name: "pi_web_stop",
+    description:
+      "Stop the running Pi Agent visual Web UI dashboard companion daemon process.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        port: {
+          type: "number",
+          description: "Optional port number of the Web UI dashboard to stop (default: 7081).",
+        },
+      },
+    },
+  },
   // Backward-compatible DSH aliases
   {
     name: "dsh_run_task",
@@ -232,6 +275,48 @@ export const TOOLS = [
         },
       },
       required: ["cwd", "brief"],
+    },
+  },
+  {
+    name: "dsh_web_start",
+    description:
+      "(Legacy compatibility alias for pi_web_start) Start the Web UI dashboard companion in background daemon mode.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        port: {
+          type: "number",
+          description: "Optional port number to bind (default: 7081).",
+        },
+      },
+    },
+  },
+  {
+    name: "dsh_web_status",
+    description:
+      "(Legacy compatibility alias for pi_web_status) Inspect the running status of the Web UI companion.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        port: {
+          type: "number",
+          description: "Optional port number to inspect (default: 7081).",
+        },
+      },
+    },
+  },
+  {
+    name: "dsh_web_stop",
+    description:
+      "(Legacy compatibility alias for pi_web_stop) Stop the running Web UI companion process.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        port: {
+          type: "number",
+          description: "Optional port number to stop (default: 7081).",
+        },
+      },
     },
   },
 ];
@@ -363,6 +448,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           model,
           endpoint,
         });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "pi_web_start":
+      case "dsh_web_start": {
+        const { port } = (args || {}) as any;
+        const status = await startWebUi(port);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(status, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "pi_web_status":
+      case "dsh_web_status": {
+        const { port } = (args || {}) as any;
+        const status = await getWebStatus(port);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(status, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "pi_web_stop":
+      case "dsh_web_stop": {
+        const { port } = (args || {}) as any;
+        const result = await stopWebUi(port);
         return {
           content: [
             {

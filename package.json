@@ -11,6 +11,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node build/mcp.js",
+    "web": "node build/web.js",
     "doctor": "node build/doctor.js",
     "setup": "./scripts/setup.sh",
     "test": "vitest run",

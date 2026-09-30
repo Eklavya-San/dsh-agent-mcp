@@ -61,12 +61,16 @@ export interface DshSessionInfo {
   sizeBytes: number;
 }
 
-export interface DshWebStatus {
+export interface PiWebStatus {
   running: boolean;
   port: number;
   url: string;
   pid?: number;
-  recentSessionsCount: number;
+  activeTasksCount?: number;
+}
+
+export interface DshWebStatus extends PiWebStatus {
+  recentSessionsCount?: number;
 }
 
 export interface DshReviewOptions {

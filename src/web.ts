@@ -2,8 +2,10 @@ import { spawn, execSync } from "child_process";
 import { EventEmitter } from "events";
 import http from "http";
 import https from "https";
+import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
-import type { DshWebStatus } from "./types.js";
+import type { PiWebStatus, DshWebStatus } from "./types.js";
 import { listActiveTasks, cancelPiTask } from "./runner.js";
 import { checkPiInstalled } from "./pi-bin.js";
 import { loadPiConfig, setPiDefaultModel, savePiProvider } from "./pi-config.js";
@@ -281,59 +283,94 @@ export function createWebServer(): http.Server {
   return server;
 }
 
-export async function getWebStatus(port = DEFAULT_PORT): Promise<DshWebStatus> {
+export function getWebJsPath(): string {
+  const currentFile = fileURLToPath(import.meta.url);
+  if (currentFile.endsWith("web.js") && fs.existsSync(currentFile)) {
+    return currentFile;
+  }
+  const candidate = path.resolve(path.dirname(currentFile), "../build/web.js");
+  if (fs.existsSync(candidate)) {
+    return candidate;
+  }
+  return currentFile;
+}
+
+export async function getWebStatus(port = DEFAULT_PORT): Promise<PiWebStatus> {
   const url = `http://127.0.0.1:${port}`;
   let running = false;
   let pid: number | undefined;
+  let activeTasksCount: number | undefined;
 
   // Check if port responds or process exists
   try {
     const lsof = execSync(`lsof -i :${port} -sTCP:LISTEN -t`, { encoding: "utf-8" }).trim();
     if (lsof) {
-      pid = parseInt(lsof.split("\n")[0], 10);
-      running = true;
+      const parsedPid = parseInt(lsof.split("\n")[0], 10);
+      if (!isNaN(parsedPid) && parsedPid > 0) {
+        pid = parsedPid;
+        running = true;
+      }
     }
   } catch {
     running = false;
   }
 
-  // Also verify HTTP response if running
+  // Fast HTTP GET to confirm server health and get active tasks count
   if (running) {
     try {
-      running = await new Promise<boolean>((resolve) => {
-        const req = http.get(url, { timeout: 2000 }, (res) => {
-          resolve(res.statusCode !== undefined && res.statusCode < 500);
+      const statusData = await new Promise<{ healthy: boolean; activeTasksCount?: number }>((resolve) => {
+        const req = http.get(`${url}/api/status`, { timeout: 2000 }, (res) => {
+          let body = "";
+          res.on("data", (chunk) => {
+            body += chunk;
+          });
+          res.on("end", () => {
+            const healthy = res.statusCode !== undefined && res.statusCode >= 200 && res.statusCode < 500;
+            let tasksCount: number | undefined;
+            if (healthy && body) {
+              try {
+                const parsed = JSON.parse(body);
+                if (Array.isArray(parsed.activeTasks)) {
+                  tasksCount = parsed.activeTasks.length;
+                }
+              } catch {}
+            }
+            resolve({ healthy, activeTasksCount: tasksCount });
+          });
         });
-        req.on("error", () => resolve(false));
+        req.on("error", () => resolve({ healthy: false }));
         req.on("timeout", () => {
           req.destroy();
-          resolve(false);
+          resolve({ healthy: false });
         });
       });
+
+      running = statusData.healthy;
+      if (running && statusData.activeTasksCount !== undefined) {
+        activeTasksCount = statusData.activeTasksCount;
+      }
     } catch {
       running = false;
     }
   }
 
-  const recentSessionsCount = 0;
-
   return {
     running,
     port,
     url,
-    pid,
-    recentSessionsCount,
+    ...(pid !== undefined ? { pid } : {}),
+    ...(activeTasksCount !== undefined ? { activeTasksCount } : {}),
   };
 }
 
-export async function startWebUi(port = DEFAULT_PORT): Promise<DshWebStatus> {
+export async function startWebUi(port = DEFAULT_PORT): Promise<PiWebStatus> {
   const current = await getWebStatus(port);
   if (current.running) {
     return current;
   }
 
-  const currentFile = fileURLToPath(import.meta.url);
-  const child = spawn(process.execPath, [currentFile], {
+  const webJsPath = getWebJsPath();
+  const child = spawn("node", [webJsPath, "--port", String(port)], {
     detached: true,
     stdio: "ignore",
     env: {
@@ -344,38 +381,79 @@ export async function startWebUi(port = DEFAULT_PORT): Promise<DshWebStatus> {
 
   child.unref();
 
-  // Wait briefly for server to bind
-  await new Promise((r) => setTimeout(r, 1000));
+  // Wait up to 3000ms for server to bind
+  const startTime = Date.now();
+  while (Date.now() - startTime < 3000) {
+    const status = await getWebStatus(port);
+    if (status.running) {
+      return status;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
 
   return await getWebStatus(port);
 }
 
 export async function stopWebUi(port = DEFAULT_PORT): Promise<{ stopped: boolean; message: string }> {
   try {
-    const lsof = execSync(`lsof -i :${port} -sTCP:LISTEN -t`, { encoding: "utf-8" }).trim();
+    let lsof = "";
+    try {
+      lsof = execSync(`lsof -i :${port} -sTCP:LISTEN -t`, { encoding: "utf-8" }).trim();
+    } catch {
+      // lsof exits with non-zero when no matching process is listening
+      return { stopped: true, message: `No active Web UI process found on port ${port}` };
+    }
+
     if (!lsof) {
-      return { stopped: true, message: `No process was listening on port ${port}` };
+      return { stopped: true, message: `No active Web UI process found on port ${port}` };
     }
     const pids = lsof.split("\n").map((p) => p.trim()).filter(Boolean);
-    for (const pid of pids) {
-      process.kill(parseInt(pid, 10), "SIGTERM");
+    for (const pidStr of pids) {
+      const pid = parseInt(pidStr, 10);
+      if (!isNaN(pid) && pid > 0) {
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch (killErr: any) {
+          if (killErr.code !== "ESRCH") {
+            throw killErr;
+          }
+        }
+      }
     }
-    return { stopped: true, message: `Terminated Pi Web process (PID ${pids.join(", ")})` };
+    await new Promise((r) => setTimeout(r, 100));
+    return { stopped: true, message: `Terminated Pi Web process (PID ${pids.join(", ")}) on port ${port}` };
   } catch (err: any) {
-    return { stopped: false, message: `Failed to stop Pi Web: ${err?.message}` };
+    return { stopped: false, message: `Failed to stop Pi Web: ${err?.message || String(err)}` };
   }
 }
 
-const isMain =
+export function parsePortArg(): number {
+  const portIndex = process.argv.indexOf("--port");
+  if (portIndex !== -1 && process.argv[portIndex + 1]) {
+    const parsed = parseInt(process.argv[portIndex + 1], 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  const pIndex = process.argv.indexOf("-p");
+  if (pIndex !== -1 && process.argv[pIndex + 1]) {
+    const parsed = parseInt(process.argv[pIndex + 1], 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return parseInt(process.env.PI_WEB_PORT || "7081", 10) || DEFAULT_PORT;
+}
+
+const isMain = Boolean(
   process.argv[1] &&
-  (process.argv[1] === fileURLToPath(import.meta.url) ||
-    process.argv[1].endsWith("web.js") ||
-    process.argv[1].endsWith("web.ts"));
+    !process.argv[1].includes("vitest") &&
+    (process.argv[1] === fileURLToPath(import.meta.url) ||
+      process.argv[1].includes("web.js") ||
+      process.argv.includes("--port"))
+);
 
 if (isMain) {
-  const port = parseInt(process.env.PI_WEB_PORT || "7081", 10);
+  const port = parsePortArg();
   const server = createWebServer();
   server.listen(port, "0.0.0.0", () => {
     process.stderr.write(`Pi Agent Web Dashboard running on http://127.0.0.1:${port}\n`);
   });
 }
+
