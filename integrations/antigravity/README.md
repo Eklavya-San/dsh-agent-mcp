@@ -4,11 +4,11 @@ This directory contains the ready-to-use subagents, rules, and skills for Google
 
 ## Automated Setup (Recommended)
 
-Run the installer from the root of `dsh-agent-mcp`:
+Run the installer from the root of `pi-agent-mcp`:
 ```bash
 ./scripts/setup.sh
 ```
-This automatically copies the subagents, rules, and skills into your Antigravity configuration directory (`~/.gemini/config/`).
+This automatically copies the subagents, rules, and skills into your Antigravity configuration directory (`~/.gemini/config/`), and configures `mcp_config.json`.
 
 ---
 
@@ -21,8 +21,8 @@ If you prefer to configure Antigravity manually:
 mkdir -p ~/.gemini/config/agents
 cp integrations/antigravity/agents/*.md ~/.gemini/config/agents/
 ```
-- `dsh-worker.md`: Dispatches mechanical implementation to DeepSeek Harness (`dsh_run_task`) at $0 token cost.
-- `reviewer-worker.md`: Audits git diffs, verifies tests, and provides an independent `[CONFIRMED / APPROVED]` QA gate.
+- `pi-worker.md`: Dispatches mechanical implementation to Pi Coding Agent (`pi_run_task`) at $0 token cost.
+- `reviewer-worker.md`: Audits git diffs, verifies tests, runs `pi_review_task`, and provides an independent `[CONFIRMED / APPROVED]` QA gate.
 
 ### 2. Copy Dual-Agent Protocol Rule
 ```bash
@@ -32,8 +32,8 @@ cp integrations/antigravity/rules/AGENTS.md ~/.gemini/config/rules/
 
 ### 3. Copy Orchestration Skill
 ```bash
-mkdir -p ~/.gemini/config/skills/dsh-orchestration
-cp integrations/antigravity/skills/dsh-orchestration/SKILL.md ~/.gemini/config/skills/dsh-orchestration/
+mkdir -p ~/.gemini/config/skills/pi-orchestration
+cp integrations/antigravity/skills/pi-orchestration/SKILL.md ~/.gemini/config/skills/pi-orchestration/
 ```
 
 ### 4. Register MCP Server
@@ -41,15 +41,15 @@ Add the following to `~/.gemini/config/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "dsh": {
+    "pi-agent": {
       "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/dsh-agent-mcp/build/mcp.js"],
+      "args": ["/ABSOLUTE/PATH/TO/pi-agent-mcp/build/mcp.js"],
       "env": {
-        "DSH_MODEL_ENDPOINT": "http://localhost:11434/v1",
-        "DSH_MODEL": "qwen2.5-coder:32b"
+        "FREETOKEN_BASE_URL": "http://machinewiseapp.in:10346/v1",
+        "PI_DEFAULT_PROVIDER": "freetoken"
       }
     }
   }
 }
 ```
-*(Replace `/ABSOLUTE/PATH/TO/dsh-agent-mcp` with your actual checkout path)*
+*(Replace `/ABSOLUTE/PATH/TO/pi-agent-mcp` with your actual checkout path)*
