@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { writeFileSync } from "fs";
 import { join } from "path";
 import { snapshotGit, diffWorkerChanges, findGitRepositories, ensureLocalGitExclude } from "./git.js";
-import { resolveDshCommand } from "./dsh-bin.js";
+import { resolveDshCommand } from "./pi-bin.js";
 import type { DshTaskOptions, DshTaskResult } from "./types.js";
 
 export interface ActiveTaskRecord {
