@@ -98,3 +98,81 @@ export interface DshReviewResult {
   };
 }
 
+export interface ProviderConfig {
+  id: string;
+  name: string;
+  baseUrl: string;
+  defaultModel: string;
+  apiKey?: string;
+  authHeader?: string;
+}
+
+export interface PiTaskOptions {
+  cwd: string;
+  task: string;
+  provider?: string;
+  model?: string;
+  timeoutMs?: number;
+  verbose?: boolean;
+}
+
+export interface PiTaskResult {
+  status: "SUCCESS" | "FAILED" | "TIMED_OUT";
+  taskId: string;
+  cwd: string;
+  task: string;
+  durationMs: number;
+  filesChanged: string[];
+  diffSummary: string;
+  rawDiff: string;
+  output: string;
+  error?: string;
+}
+
+export interface PiReviewOptions {
+  cwd: string;
+  brief: string;
+  diff?: string;
+  testCommand?: string;
+  provider?: string;
+  model?: string;
+}
+
+export interface PiReviewResult {
+  verdict: "APPROVED" | "NEEDS_REVISION";
+  summary: string;
+  diffInspected: string;
+  specCompliance: {
+    compliant: boolean;
+    missingRequirements: string[];
+    unrequestedChanges: string[];
+  };
+  qualityAudit: {
+    issues: Array<{ severity: "CRITICAL" | "IMPORTANT" | "MINOR"; description: string; file?: string }>;
+    strengths: string[];
+  };
+  testResults?: {
+    command: string;
+    passed: boolean;
+    output: string;
+  };
+}
+
+export interface PiDoctorReport {
+  status: "HEALTHY" | "DEGRADED" | "DOWN";
+  piBinary: {
+    installed: boolean;
+    path?: string;
+    version?: string;
+  };
+  providers: Array<{
+    id: string;
+    name: string;
+    baseUrl: string;
+    model: string;
+    reachable: boolean;
+    latencyMs?: number;
+    error?: string;
+  }>;
+}
+

@@ -1,11 +1,11 @@
 {
-  "name": "dsh-agent-mcp",
+  "name": "pi-agent-mcp",
   "version": "1.0.0",
-  "description": "Model Context Protocol (MCP) server connecting Antigravity, Claude, and Cursor to DeepSeek Harness for $0-cost autonomous coding and dual-agent verification.",
+  "description": "Autonomous Pi Coding Agent MCP Server for Antigravity & Claude Code with multi-repo git diffing, live terminal streaming, and dual-agent QA verification",
   "main": "build/mcp.js",
   "bin": {
-    "dsh-agent-mcp": "./build/mcp.js",
-    "dsh-live": "./bin/dsh-live"
+    "pi-agent-mcp": "./build/mcp.js",
+    "pi-live": "./bin/pi-live"
   },
   "type": "module",
   "scripts": {
