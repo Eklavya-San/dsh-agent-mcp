@@ -2,9 +2,10 @@ import { execSync } from "child_process";
 import http from "http";
 import https from "https";
 import { diffWorkerChanges, snapshotGit } from "./git.js";
-import type { DshReviewOptions, DshReviewResult } from "./types.js";
+import { resolveProvider } from "./providers.js";
+import type { DshReviewOptions, DshReviewResult, PiReviewOptions, PiReviewResult } from "./types.js";
 
-export function formatReviewPrompt(options: DshReviewOptions): string {
+export function formatPiReviewPrompt(options: PiReviewOptions): string {
   return `You are an expert code reviewer and QA verifier.
 Audit this change against the architect's intent brief.
 
@@ -32,17 +33,31 @@ Return a strictly valid JSON object matching this schema:
 }`;
 }
 
-export function parseReviewVerdict(rawText: string): DshReviewResult {
+export function parsePiReviewVerdict(rawText: string): PiReviewResult {
   try {
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      const verdict = parsed.verdict === "APPROVED" ? "APPROVED" : "NEEDS_REVISION";
       return {
-        verdict: parsed.verdict === "APPROVED" ? "APPROVED" : "NEEDS_REVISION",
-        summary: parsed.summary || "Review completed.",
+        verdict,
+        summary: typeof parsed.summary === "string" && parsed.summary ? parsed.summary : "Review completed.",
         diffInspected: "",
-        specCompliance: parsed.specCompliance || { compliant: parsed.verdict === "APPROVED", missingRequirements: [], unrequestedChanges: [] },
-        qualityAudit: parsed.qualityAudit || { issues: [], strengths: [] },
+        specCompliance: {
+          compliant: typeof parsed.specCompliance?.compliant === "boolean"
+            ? parsed.specCompliance.compliant
+            : verdict === "APPROVED",
+          missingRequirements: Array.isArray(parsed.specCompliance?.missingRequirements)
+            ? parsed.specCompliance.missingRequirements
+            : [],
+          unrequestedChanges: Array.isArray(parsed.specCompliance?.unrequestedChanges)
+            ? parsed.specCompliance.unrequestedChanges
+            : [],
+        },
+        qualityAudit: {
+          issues: Array.isArray(parsed.qualityAudit?.issues) ? parsed.qualityAudit.issues : [],
+          strengths: Array.isArray(parsed.qualityAudit?.strengths) ? parsed.qualityAudit.strengths : [],
+        },
       };
     }
   } catch {}
@@ -52,12 +67,18 @@ export function parseReviewVerdict(rawText: string): DshReviewResult {
     verdict: isApproved ? "APPROVED" : "NEEDS_REVISION",
     summary: rawText.slice(0, 500),
     diffInspected: "",
-    specCompliance: { compliant: isApproved, missingRequirements: [], unrequestedChanges: [] },
+    specCompliance: {
+      compliant: isApproved,
+      missingRequirements: [],
+      unrequestedChanges: [],
+    },
     qualityAudit: { issues: [], strengths: [] },
   };
 }
 
-export async function runDshReview(options: DshReviewOptions): Promise<DshReviewResult> {
+export async function runPiReview(
+  options: PiReviewOptions & { endpoint?: string; apiKey?: string }
+): Promise<PiReviewResult> {
   const { cwd, brief, testCommand } = options;
 
   // 1. Resolve diff if not provided
@@ -75,26 +96,37 @@ export async function runDshReview(options: DshReviewOptions): Promise<DshReview
       const out = execSync(testCommand, { cwd, encoding: "utf-8", timeout: 120000 });
       testExecResult = { command: testCommand, passed: true, output: out.slice(0, 4000) };
     } catch (err: any) {
-      testExecResult = { command: testCommand, passed: false, output: (err.stdout || err.message || "").slice(0, 4000) };
+      testExecResult = {
+        command: testCommand,
+        passed: false,
+        output: (err.stdout || err.message || "").slice(0, 4000),
+      };
     }
   }
 
-  // 3. Connect to local/free model endpoint
-  const endpoint = options.endpoint || process.env.DSH_MODEL_ENDPOINT || process.env.OPENAI_BASE_URL || "http://localhost:11434/v1";
-  const model = options.model || process.env.DSH_MODEL || process.env.OPENAI_MODEL_NAME || "qwen2.5-coder:32b";
-  const prompt = formatReviewPrompt({ ...options, diff: effectiveDiff });
+  // 3. Connect to provider endpoint
+  const provider = resolveProvider(options.provider);
+  const endpoint = options.endpoint || provider.baseUrl;
+  const model = options.model || provider.defaultModel;
+  const prompt = formatPiReviewPrompt({ ...options, diff: effectiveDiff });
 
   let reviewResponse = "";
   try {
-    const isHttps = endpoint.startsWith("https://");
+    const parsedUrl = new URL(`${endpoint.replace(/\/+$/, "")}/chat/completions`);
+    const isHttps = parsedUrl.protocol === "https:";
     const client = isHttps ? https : http;
+
     const body = JSON.stringify({
       model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
     });
 
-    const parsedUrl = new URL(`${endpoint.replace(/\/+$/, "")}/chat/completions`);
+    const authVal = options.apiKey || provider.apiKey;
+    const authHeader =
+      provider.authHeader ||
+      (authVal ? `Bearer ${authVal}` : process.env.OPENAI_API_KEY ? `Bearer ${process.env.OPENAI_API_KEY}` : undefined);
+
     reviewResponse = await new Promise<string>((resolve, reject) => {
       const req = client.request(
         parsedUrl,
@@ -103,13 +135,13 @@ export async function runDshReview(options: DshReviewOptions): Promise<DshReview
           headers: {
             "Content-Type": "application/json",
             "Content-Length": Buffer.byteLength(body),
-            ...(process.env.OPENAI_API_KEY ? { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } : {}),
+            ...(authHeader ? { Authorization: authHeader } : {}),
           },
           timeout: 45000,
         },
         (res) => {
           let data = "";
-          res.on("data", chunk => (data += chunk));
+          res.on("data", (chunk) => (data += chunk));
           res.on("end", () => {
             try {
               const json = JSON.parse(data);
@@ -132,7 +164,7 @@ export async function runDshReview(options: DshReviewOptions): Promise<DshReview
     reviewResponse = `[Auto-Fallback]: Review connection to ${endpoint} failed (${err.message}). Defaulting to manual verification check.`;
   }
 
-  const result = parseReviewVerdict(reviewResponse);
+  const result = parsePiReviewVerdict(reviewResponse);
   result.diffInspected = (effectiveDiff || "").slice(0, 4000);
   if (testExecResult) {
     result.testResults = testExecResult;
@@ -144,3 +176,8 @@ export async function runDshReview(options: DshReviewOptions): Promise<DshReview
 
   return result;
 }
+
+// Backward-compatibility aliases for src/mcp.ts until rewired
+export const formatReviewPrompt = formatPiReviewPrompt;
+export const parseReviewVerdict = parsePiReviewVerdict;
+export const runDshReview = runPiReview;
