@@ -38,6 +38,7 @@ cd "${REPO_DIR}"
 npm install
 npm run build
 echo "✅ Build completed successfully (${MCP_SERVER_PATH})."
+echo "✅ Web UI companion compiled (${REPO_DIR}/build/web.js)."
 
 # 4. Make CLI and helper binaries executable
 chmod +x "${REPO_DIR}/bin/pi-live" "${REPO_DIR}/bin/pi-stream.js" 2>/dev/null || true
@@ -158,4 +159,16 @@ cat << EOF
 }
 EOF
 echo ""
-echo "To verify server health anytime, run: npm run doctor"
+echo "=========================================================="
+echo "🌐 Web UI Companion Dashboard (Port 7081)"
+echo "=========================================================="
+echo "Launch the real-time visual monitoring dashboard:"
+echo "  • CLI Runner:     npm run web (or: node build/web.js --port 7081)"
+echo "  • Background MCP: call 'pi_web_start' (or 'dsh_web_start')"
+echo "  • Dashboard URL:  http://127.0.0.1:7081"
+echo "  • Stop Daemon:    call 'pi_web_stop' (or 'dsh_web_stop')"
+echo ""
+echo "Features: Live worker monitoring, SSE terminal streaming, 1-click abort, and provider testing."
+echo "=========================================================="
+echo ""
+echo "To verify server and provider health anytime, run: npm run doctor"
