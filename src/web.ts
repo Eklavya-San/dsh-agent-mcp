@@ -1,6 +1,5 @@
 import { spawn, execSync } from "child_process";
 import http from "http";
-import { countRecentSessions } from "./sessions.js";
 import type { DshWebStatus } from "./types.js";
 
 const DEFAULT_PORT = 3080;
@@ -39,7 +38,7 @@ export async function getWebStatus(port = DEFAULT_PORT): Promise<DshWebStatus> {
     }
   }
 
-  const recentSessionsCount = countRecentSessions();
+  const recentSessionsCount = 0;
 
   return {
     running,

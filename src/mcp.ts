@@ -1,23 +1,21 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { runDshTask, cancelDshTask, listActiveTasks } from "./runner.js";
-import { runDshDoctor } from "./doctor.js";
-import { getWebStatus, startWebUi, stopWebUi } from "./web.js";
-import { listSessions } from "./sessions.js";
-import { runDshReview } from "./review.js";
+import { runPiTask, cancelPiTask, listActiveTasks } from "./runner.js";
+import { runPiDoctor } from "./doctor.js";
+import { listProviders } from "./providers.js";
+import { runPiReview } from "./review.js";
 
-const TOOLS = [
+export const TOOLS = [
   {
-    name: "dsh_run_task",
+    name: "pi_run_task",
     description:
-      "Dispatch an autonomous coding task to DeepSeek Harness in headless mode using the configured local/free model. " +
-      "The worker operates directly on the specified repository, reasons autonomously, creates/edits files, executes bash commands, " +
-      "tracks git diffs, and returns structured execution results with zero front-end token burn.",
+      "Dispatch an autonomous coding task to the Pi Coding Agent in headless mode. Operates directly on the specified repository, reasons autonomously, creates/edits files, executes bash commands, tracks multi-repo git diffs, and returns structured execution results with $0 front-end token burn.",
     inputSchema: {
       type: "object",
       properties: {
@@ -29,13 +27,13 @@ const TOOLS = [
           type: "string",
           description: "Clear explicit instructions for the task.",
         },
+        provider: {
+          type: "string",
+          description: "Optional inference provider (freetoken, nvidia-nim, ollama, openrouter).",
+        },
         model: {
           type: "string",
-          description: "Optional model override (e.g. qwen2.5-coder:32b, Qwen3.6-35B-A3B-NVFP4).",
-        },
-        endpoint: {
-          type: "string",
-          description: "Optional OpenAI-compatible endpoint URL (e.g. http://localhost:11434/v1).",
+          description: "Optional model override.",
         },
         timeoutMs: {
           type: "number",
@@ -50,74 +48,26 @@ const TOOLS = [
     },
   },
   {
-    name: "dsh_doctor",
+    name: "pi_doctor",
     description:
-      "Health-check the DeepSeek Harness setup. Checks DSH binary installation, ~/.dsh/settings.yaml configuration, " +
-      "model endpoint connectivity, and Web UI status.",
+      "Health-check the Pi Coding Agent environment. Checks 'pi' binary installation and tests connectivity across configured providers (FreeToken, NVIDIA NIM, Ollama, OpenRouter).",
     inputSchema: {
       type: "object",
       properties: {},
     },
   },
   {
-    name: "dsh_web_status",
+    name: "pi_list_providers",
     description:
-      "Check if the DeepSeek Harness Web UI is currently running on port 3080, and list active sessions count.",
+      "List all configured inference providers (FreeToken, NVIDIA NIM, Ollama, OpenRouter) with their base URLs, default models, and auth requirements.",
     inputSchema: {
       type: "object",
-      properties: {
-        port: {
-          type: "number",
-          description: "Port to check (default: 3080).",
-        },
-      },
+      properties: {},
     },
   },
   {
-    name: "dsh_web_start",
-    description:
-      "Start the DeepSeek Harness Web UI companion in background daemon mode on port 3080 (http://127.0.0.1:3080).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        port: {
-          type: "number",
-          description: "Port to bind (default: 3080).",
-        },
-      },
-    },
-  },
-  {
-    name: "dsh_web_stop",
-    description:
-      "Stop the running DeepSeek Harness Web UI companion process on port 3080.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        port: {
-          type: "number",
-          description: "Port to terminate (default: 3080).",
-        },
-      },
-    },
-  },
-  {
-    name: "dsh_list_sessions",
-    description:
-      "Discover and list existing DeepSeek Harness sessions stored in ~/.dsh/sessions/, sorted by most recent.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        workspace: {
-          type: "string",
-          description: "Optional filter to match workspace path.",
-        },
-      },
-    },
-  },
-  {
-    name: "dsh_cancel_task",
-    description: "Terminate an active DeepSeek Harness task process by taskId.",
+    name: "pi_cancel_task",
+    description: "Terminate an active Pi Coding Agent task process by taskId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -130,18 +80,17 @@ const TOOLS = [
     },
   },
   {
-    name: "dsh_list_active_tasks",
-    description: "List currently running DeepSeek Harness tasks with their duration and workspace.",
+    name: "pi_list_active_tasks",
+    description: "List currently running Pi tasks with their duration and workspace.",
     inputSchema: {
       type: "object",
       properties: {},
     },
   },
   {
-    name: "dsh_review_task",
+    name: "pi_review_task",
     description:
-      "Automated code review and QA verification tool for dual-agent workflows. Inspects git diffs, executes test suites, " +
-      "and queries the configured local/free model for a structured evaluation of architectural intent compliance and code quality.",
+      "Automated code review and QA verification tool for dual-agent workflows. Inspects git diffs, executes test suites, and queries the configured local/free model for a structured evaluation of architectural intent compliance and code quality.",
     inputSchema: {
       type: "object",
       properties: {
@@ -161,13 +110,125 @@ const TOOLS = [
           type: "string",
           description: "Optional test or build command to execute for automated QA verification (e.g. 'npm test').",
         },
+        provider: {
+          type: "string",
+          description: "Optional provider override for the review evaluator.",
+        },
+        model: {
+          type: "string",
+          description: "Optional model override for the review evaluator.",
+        },
+      },
+      required: ["cwd", "brief"],
+    },
+  },
+  // Backward-compatible DSH aliases
+  {
+    name: "dsh_run_task",
+    description:
+      "(Legacy compatibility alias for pi_run_task) Dispatch an autonomous coding task to the Pi Coding Agent in headless mode.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cwd: {
+          type: "string",
+          description: "Absolute path to repository/workspace.",
+        },
+        task: {
+          type: "string",
+          description: "Clear explicit instructions for the task.",
+        },
+        provider: {
+          type: "string",
+          description: "Optional inference provider (freetoken, nvidia-nim, ollama, openrouter).",
+        },
+        model: {
+          type: "string",
+          description: "Optional model override.",
+        },
+        endpoint: {
+          type: "string",
+          description: "Optional model endpoint override URL.",
+        },
+        timeoutMs: {
+          type: "number",
+          description: "Max execution time in milliseconds (default: 30 minutes).",
+        },
+        verbose: {
+          type: "boolean",
+          description: "Include raw stdout/stderr in output.",
+        },
+      },
+      required: ["cwd", "task"],
+    },
+  },
+  {
+    name: "dsh_doctor",
+    description:
+      "(Legacy compatibility alias for pi_doctor) Health-check the Pi Coding Agent environment.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "dsh_cancel_task",
+    description:
+      "(Legacy compatibility alias for pi_cancel_task) Terminate an active task process by taskId.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        taskId: {
+          type: "string",
+          description: "ID of the task to terminate.",
+        },
+      },
+      required: ["taskId"],
+    },
+  },
+  {
+    name: "dsh_list_active_tasks",
+    description:
+      "(Legacy compatibility alias for pi_list_active_tasks) List currently running tasks with their duration and workspace.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "dsh_review_task",
+    description:
+      "(Legacy compatibility alias for pi_review_task) Automated code review and QA verification tool for dual-agent workflows.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cwd: {
+          type: "string",
+          description: "Absolute path to repository/workspace.",
+        },
+        brief: {
+          type: "string",
+          description: "Architectural intent or task description to audit the changes against.",
+        },
+        diff: {
+          type: "string",
+          description: "Optional explicit git diff string. If omitted, diff is automatically computed from git status/HEAD.",
+        },
+        testCommand: {
+          type: "string",
+          description: "Optional test or build command to execute for automated QA verification (e.g. 'npm test').",
+        },
+        provider: {
+          type: "string",
+          description: "Optional provider override for the review evaluator.",
+        },
         model: {
           type: "string",
           description: "Optional model override for the review evaluator.",
         },
         endpoint: {
           type: "string",
-          description: "Optional OpenAI-compatible model endpoint URL.",
+          description: "Optional model endpoint override URL.",
         },
       },
       required: ["cwd", "brief"],
@@ -175,10 +236,9 @@ const TOOLS = [
   },
 ];
 
-
-const server = new Server(
+export const server = new Server(
   {
-    name: "dsh-agent-mcp",
+    name: "pi-agent-mcp",
     version: "1.0.0",
   },
   {
@@ -197,12 +257,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      case "pi_run_task":
       case "dsh_run_task": {
-        const { cwd, task, model, endpoint, apiKey, profile, timeoutMs, verbose } = (args || {}) as any;
+        const { cwd, task, provider, model, endpoint, apiKey, timeoutMs, verbose } = (args || {}) as any;
         if (!cwd || !task) {
           throw new Error("Missing required arguments 'cwd' and 'task'.");
         }
-        const result = await runDshTask({ cwd, task, model, endpoint, apiKey, profile, timeoutMs, verbose });
+        const result = await runPiTask({
+          cwd,
+          task,
+          provider,
+          model,
+          timeoutMs,
+          verbose,
+          ...(endpoint ? { endpoint } : {}),
+          ...(apiKey ? { apiKey } : {}),
+        } as any);
         return {
           content: [
             {
@@ -213,8 +283,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "pi_doctor":
       case "dsh_doctor": {
-        const report = await runDshDoctor();
+        const report = await runPiDoctor();
         return {
           content: [
             {
@@ -225,64 +296,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "dsh_web_status": {
-        const port = (args as any)?.port || 3080;
-        const status = await getWebStatus(port);
+      case "pi_list_providers": {
+        const providers = listProviders();
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify(status, null, 2),
+              text: JSON.stringify({ count: providers.length, providers }, null, 2),
             },
           ],
         };
       }
 
-      case "dsh_web_start": {
-        const port = (args as any)?.port || 3080;
-        const status = await startWebUi(port);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(status, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "dsh_web_stop": {
-        const port = (args as any)?.port || 3080;
-        const result = await stopWebUi(port);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "dsh_list_sessions": {
-        const workspace = (args as any)?.workspace;
-        const sessions = listSessions(workspace);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ count: sessions.length, sessions }, null, 2),
-            },
-          ],
-        };
-      }
-
+      case "pi_cancel_task":
       case "dsh_cancel_task": {
         const { taskId } = (args || {}) as any;
         if (!taskId) {
           throw new Error("Missing required argument 'taskId'.");
         }
-        const cancelled = cancelDshTask(taskId);
+        const cancelled = cancelPiTask(taskId);
         return {
           content: [
             {
@@ -303,6 +335,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "pi_list_active_tasks":
       case "dsh_list_active_tasks": {
         const tasks = listActiveTasks();
         return {
@@ -315,12 +348,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "pi_review_task":
       case "dsh_review_task": {
-        const { cwd, brief, diff, testCommand, model, endpoint } = (args || {}) as any;
+        const { cwd, brief, diff, testCommand, provider, model, endpoint } = (args || {}) as any;
         if (!cwd || !brief) {
           throw new Error("Missing required arguments 'cwd' and 'brief'.");
         }
-        const result = await runDshReview({ cwd, brief, diff, testCommand, model, endpoint });
+        const result = await runPiReview({
+          cwd,
+          brief,
+          diff,
+          testCommand,
+          provider,
+          model,
+          endpoint,
+        });
         return {
           content: [
             {
@@ -347,13 +389,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-async function run() {
+
+export async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  process.stderr.write("DeepSeek Harness MCP Server (dsh-agent-mcp) running on stdio\n");
+  process.stderr.write("Pi Agent MCP Server (pi-agent-mcp) running on stdio\n");
 }
 
-run().catch((error) => {
-  process.stderr.write(`Fatal error: ${error}\n`);
-  process.exit(1);
-});
+const isDirectRun = Boolean(
+  process.argv[1] &&
+    (process.argv[1] === fileURLToPath(import.meta.url) ||
+      process.argv[1].endsWith("/mcp.js") ||
+      process.argv[1].endsWith("/mcp.ts") ||
+      process.argv[1].endsWith("pi-agent-mcp"))
+);
+
+if (isDirectRun) {
+  runServer().catch((error) => {
+    process.stderr.write(`Fatal error: ${error}\n`);
+    process.exit(1);
+  });
+}
+
