@@ -1,17 +1,19 @@
 ---
 name: pi-orchestration
 description: |
-  Dual-Agent orchestration skill for delegating coding tasks to Pi coding agent in headless or live mode,
+  On-demand Dual-Agent orchestration skill for delegating coding tasks to Pi coding agent in headless or live mode,
   backed by local or free models at $0 cost, with automated review and QA verification.
+  Use ONLY when the user explicitly requests Pi delegation, dual-agent workflow, or asks for this skill.
 ---
 
-# Pi Coding Agent Dual-Agent Orchestration
+# Pi Coding Agent Dual-Agent Orchestration (On-Demand)
 
 ## 1. Core Architecture & Workflow
-Antigravity acts as the high-level Lead Architect, delegating mechanical coding tasks to **Pi Coding Agent (`pi-agent-mcp` / `pi`)**.
+By default, Antigravity performs coding and edits directly.
+When the user explicitly requests the Pi dual-agent workflow, Antigravity acts as Lead Architect and delegates mechanical coding to **Pi Coding Agent (`pi-agent-mcp` / `pi`)**.
 All heavy subagent inference runs at **$0 cost** through configured local or free endpoints (FreeToken Qwen 35B, NVIDIA NIM, Ollama, OpenRouter).
 
-Every task follows a strict 2-agent sequence:
+When invoked on-demand, the workflow follows:
 1. **Architect Prompting**: Concise (5–15 line) intent brief with target files, requirements, and verification commands.
 2. **Agent 1 (Task Completion Worker)**: Dispatched via `pi-worker` calling `pi_run_task` or running `bin/pi-live` in a terminal. Pi reads files, writes code, edits components, and executes builds autonomously.
 3. **Agent 2 (Reviewer & QA Verifier)**: Dispatched via `reviewer-worker` to audit git diffs, verify zero regressions, test independently (or call `pi_review_task`), and confirm completion (`[CONFIRMED / APPROVED]`).

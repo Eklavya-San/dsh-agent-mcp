@@ -56,8 +56,9 @@ if [ -d "${HOME}/.gemini" ]; then
   mkdir -p "${ANTIGRAVITY_CONFIG}/rules"
   mkdir -p "${ANTIGRAVITY_CONFIG}/skills/pi-orchestration"
 
-  # Clean up legacy dsh-orchestration skill if present
+  # Clean up legacy dsh-orchestration skill and freetoken-delegation rule if present
   rm -rf "${ANTIGRAVITY_CONFIG}/skills/dsh-orchestration"
+  rm -f "${ANTIGRAVITY_CONFIG}/rules/freetoken-delegation.md"
 
   # Copy agents
   cp -f "${REPO_DIR}/integrations/antigravity/agents/"*.md "${ANTIGRAVITY_CONFIG}/agents/" 2>/dev/null || true
