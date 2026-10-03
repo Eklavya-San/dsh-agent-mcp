@@ -6,7 +6,7 @@ The Dual-Agent Protocol (`pi-worker` / `pi-agent` / `pi-live` / `dsh`) is an **o
 - **Default Behavior**: Antigravity performs code generation, file edits, and verification directly using standard tools.
 - **On-Demand Activation**: The two-agent protocol is ONLY activated when:
   1. The user explicitly requests Pi, DSH, Pi Live, FreeToken, or $0 cost subagent execution (e.g., "use pi", "run with pi-live", "run pi task", "use dsh", "freetoken").
-  2. The `pi-orchestration`, `pi-worker-orchestration`, or `freetoken-subagent` skill is explicitly invoked or requested.
+  2. The `pi-orchestration` or `pi-worker-orchestration` skill is explicitly invoked or requested.
 
 When explicitly activated by the user, follow the protocol:
 
