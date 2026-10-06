@@ -21,3 +21,7 @@ The Web UI binds to `127.0.0.1` by default. If `PI_WEB_HOST` is configured to a 
 ## Provider credentials
 
 Provider endpoints and credentials should be supplied through environment variables or user configuration. No private FreeToken endpoint is embedded in runtime provider defaults.
+
+## Production trust boundary
+
+Treat the MCP worker as a privileged local automation process. Pair this application with OS-level sandboxing, filesystem permissions, outbound-network restrictions, and a dedicated service account when processing untrusted repositories or untrusted prompts.
