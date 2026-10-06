@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 export interface WorktreeInfo {
@@ -26,6 +26,16 @@ function validateTaskId(taskId: string): void {
   }
 }
 
+function ensureExcluded(root: string): void {
+  const exclude = join(root, ".git", "info", "exclude");
+  mkdirSync(dirname(exclude), { recursive: true });
+  const current = existsSync(exclude) ? readFileSync(exclude, "utf-8") : "";
+  const entry = `${WORKTREE_DIR}/`;
+  if (!current.split(/\r?\n/).some((line) => line.trim() === entry)) {
+    writeFileSync(exclude, `${current.trimEnd()}${current.trimEnd() ? "\n" : ""}${entry}\n`, "utf-8");
+  }
+}
+
 export function createTaskWorktree(repositoryRoot: string, taskId: string): WorktreeInfo {
   validateTaskId(taskId);
 
@@ -46,16 +56,8 @@ export function createTaskWorktree(repositoryRoot: string, taskId: string): Work
     throw new Error(`Worktree already exists: ${worktreePath}`);
   }
 
+  ensureExcluded(root);
   mkdirSync(dirname(worktreePath), { recursive: true });
-  // Keep task worktrees out of the primary repository status. This uses git's
-  // local exclude rather than mutating the user's committed .gitignore.
-  git(root, ["status", "--porcelain"]);
-  const exclude = join(root, ".git", "info", "exclude");
-  mkdirSync(dirname(exclude), { recursive: true });
-  try {
-    const current = existsSync(exclude) ? execFileSync("git", ["config", "--get", "core.excludesFile"], { cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim() : "";
-    void current;
-  } catch {}
 
   try {
     execFileSync("git", ["worktree", "add", "--detach", worktreePath, baseCommit], {
@@ -68,13 +70,7 @@ export function createTaskWorktree(repositoryRoot: string, taskId: string): Work
     throw error;
   }
 
-  return {
-    taskId,
-    repositoryRoot: root,
-    path: worktreePath,
-    baseCommit,
-    createdAt: Date.now(),
-  };
+  return { taskId, repositoryRoot: root, path: worktreePath, baseCommit, createdAt: Date.now() };
 }
 
 export function removeTaskWorktree(info: WorktreeInfo, force = false): void {
@@ -95,15 +91,12 @@ export function removeTaskWorktree(info: WorktreeInfo, force = false): void {
   } catch (error) {
     if (!force) throw error;
     rmSync(path, { recursive: true, force: true });
-    try {
-      execFileSync("git", ["worktree", "prune"], { cwd: root, stdio: "ignore" });
-    } catch {}
+    try { execFileSync("git", ["worktree", "prune"], { cwd: root, stdio: "ignore" }); } catch {}
   }
 }
 
 export function cleanupTaskWorktree(info: WorktreeInfo, preserve = false): void {
-  if (preserve) return;
-  removeTaskWorktree(info, true);
+  if (!preserve) removeTaskWorktree(info, true);
 }
 
 export function getTaskWorktreeRoot(repositoryRoot: string): string {
