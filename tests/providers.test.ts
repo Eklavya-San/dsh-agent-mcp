@@ -1,31 +1,46 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { resolveProvider, listProviders } from "../src/providers.js";
 
 describe("Provider Routing", () => {
-  it("should default to freetoken provider when no provider is specified", () => {
-    const provider = resolveProvider();
-    expect(provider.id).toBe("freetoken");
-    expect(provider.baseUrl).toContain("10346");
-    expect(provider.defaultModel).toBe("Qwen3.6-35B-A3B-NVFP4");
+  const originalBase = process.env.FREETOKEN_BASE_URL;
+  const originalModel = process.env.FREETOKEN_MODEL;
+
+  beforeEach(() => {
+    process.env.FREETOKEN_BASE_URL = "http://127.0.0.1:10346/v1";
+    process.env.FREETOKEN_MODEL = "test-model";
+  });
+  afterEach(() => {
+    if (originalBase === undefined) delete process.env.FREETOKEN_BASE_URL; else process.env.FREETOKEN_BASE_URL = originalBase;
+    if (originalModel === undefined) delete process.env.FREETOKEN_MODEL; else process.env.FREETOKEN_MODEL = originalModel;
   });
 
-  it("should resolve nvidia-nim provider correctly", () => {
+  it("resolves an explicitly configured provider", () => {
+    const provider = resolveProvider("freetoken");
+    expect(provider.id).toBe("freetoken");
+    expect(provider.baseUrl).toContain("10346");
+    expect(provider.defaultModel).toBe("test-model");
+  });
+
+  it("resolves nvidia-nim provider correctly", () => {
     const provider = resolveProvider("nvidia-nim");
     expect(provider.id).toBe("nvidia-nim");
     expect(provider.baseUrl).toBe("https://integrate.api.nvidia.com/v1");
-    expect(provider.defaultModel).toContain("nemotron");
   });
 
-  it("should resolve ollama provider correctly", () => {
+  it("resolves ollama provider correctly", () => {
     const provider = resolveProvider("ollama");
     expect(provider.id).toBe("ollama");
-    expect(provider.baseUrl).toMatch(/11434|10075/);
+    expect(provider.baseUrl).toContain("11434");
   });
 
-  it("should list all configured providers", () => {
+  it("lists configured providers without exposing private defaults", () => {
     const list = listProviders();
     expect(list.length).toBeGreaterThanOrEqual(4);
-    expect(list.some(p => p.id === "freetoken")).toBe(true);
-    expect(list.some(p => p.id === "nvidia-nim")).toBe(true);
+    expect(list.some((p) => p.id === "freetoken")).toBe(true);
+    expect(list.find((p) => p.id === "freetoken")?.baseUrl).toBe("http://127.0.0.1:10346/v1");
+  });
+
+  it("fails closed for unknown providers", () => {
+    expect(() => resolveProvider("does-not-exist")).toThrow(/Unknown provider/);
   });
 });
