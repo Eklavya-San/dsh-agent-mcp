@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 export interface WorktreeInfo {
@@ -39,14 +39,17 @@ function ensureExcluded(root: string): void {
 export function createTaskWorktree(repositoryRoot: string, taskId: string): WorktreeInfo {
   validateTaskId(taskId);
 
-  const root = resolve(repositoryRoot);
-  const resolvedRoot = git(root, ["rev-parse", "--show-toplevel"]);
-  if (resolve(resolvedRoot) !== root) {
-    throw new Error(`Worktree repository root must be the requested repository: ${root}`);
+  // Keep the caller-facing path lexical (important on macOS where /var is a
+  // symlink), but use canonical paths for repository identity validation.
+  const requestedRoot = resolve(repositoryRoot);
+  const root = realpathSync(requestedRoot);
+  const resolvedRoot = realpathSync(git(root, ["rev-parse", "--show-toplevel"]));
+  if (resolvedRoot !== root) {
+    throw new Error(`Worktree repository root must be the requested repository: ${requestedRoot}`);
   }
 
   const baseCommit = git(root, ["rev-parse", "HEAD"]);
-  const worktreeRoot = resolve(root, WORKTREE_DIR);
+  const worktreeRoot = resolve(requestedRoot, WORKTREE_DIR);
   const worktreePath = resolve(worktreeRoot, taskId);
   const rel = relative(worktreeRoot, worktreePath);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
@@ -70,7 +73,7 @@ export function createTaskWorktree(repositoryRoot: string, taskId: string): Work
     throw error;
   }
 
-  return { taskId, repositoryRoot: root, path: worktreePath, baseCommit, createdAt: Date.now() };
+  return { taskId, repositoryRoot: requestedRoot, path: worktreePath, baseCommit, createdAt: Date.now() };
 }
 
 export function removeTaskWorktree(info: WorktreeInfo, force = false): void {
