@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 export interface WorktreeInfo {
@@ -39,9 +39,12 @@ function ensureExcluded(root: string): void {
 export function createTaskWorktree(repositoryRoot: string, taskId: string): WorktreeInfo {
   validateTaskId(taskId);
 
-  const root = resolve(repositoryRoot);
-  const resolvedRoot = git(root, ["rev-parse", "--show-toplevel"]);
-  if (resolve(resolvedRoot) !== root) {
+  // macOS commonly exposes /var as a symlink to /private/var. Git may return
+  // the canonical path from --show-toplevel, so compare real paths rather
+  // than lexical paths to avoid rejecting an otherwise valid repository.
+  const root = realpathSync(resolve(repositoryRoot));
+  const resolvedRoot = realpathSync(git(root, ["rev-parse", "--show-toplevel"]));
+  if (resolvedRoot !== root) {
     throw new Error(`Worktree repository root must be the requested repository: ${root}`);
   }
 
